@@ -1,0 +1,42 @@
+# .github/workflows/ci.yml — per docs 15 & 23. CI never touches exchange endpoints.
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    env:
+      HYPOTHESIS_PROFILE: ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with: { python-version: "3.12" }
+      - run: uv sync --locked --all-extras --dev
+
+      - name: Lint & format
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Types (strict on money paths)
+        run: |
+          uv run mypy src/quant/engine src/quant/ledger src/quant/evaluation --strict
+
+      - name: Layer rule (import-linter)
+        run: uv run lint-imports
+
+      - name: Engine purity grep-gate
+        run: |
+          test -d src/quant/engine
+          ! grep -rE "(^|[^A-Za-z0-9_.])(import|from)[[:space:]]+(io|requests|httpx|duckdb)\b|datetime\.now" src/quant/engine/ || (echo "Engine purity violation" && exit 1)
+
+      - name: Unit + property tests
+        run: uv run pytest tests/unit tests/property -q
+
+      - name: Golden scenarios
+        run: uv run pytest tests/golden -q
+
+      - name: Integration (committed fixtures only)
+        run: uv run pytest tests/integration -q

@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[co]
+.venv/
+dist/
+*.egg-info/
+
+# Tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Claude Code workspace
+.claude/
+
+# macOS
+.DS_Store
