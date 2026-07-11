@@ -1,0 +1,28 @@
+[project]
+name = "platform"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "duckdb>=1.5.4",
+    "httpx>=0.28.1",
+    "jinja2>=3.1.6",
+    "pandas>=3.0.3",
+    "pyarrow>=25.0.0",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.2",
+    "structlog>=26.1.0",
+    "typer>=0.26.8",
+]
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.156.6",
+    "import-linter>=2.13",
+    "mypy>=2.2.0",
+    "pandera>=0.32.1",
+    "pre-commit>=4.6.0",
+    "pytest>=9.1.1",
+    "ruff>=0.15.21",
+]
