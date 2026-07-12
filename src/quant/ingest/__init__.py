@@ -5,3 +5,7 @@ registry row, and do nothing else. Idempotent by (source, logical_date); re-down
 supersession rows, never mutations. Parsing lives in curation — raw is stored even when it will
 fail to parse, so data is never lost.
 """
+
+from quant.ingest.store import RawArtifact, RawStore
+
+__all__ = ["RawArtifact", "RawStore"]

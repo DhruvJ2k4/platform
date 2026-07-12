@@ -36,3 +36,14 @@
 - Doc-23 exception taxonomy landed in quant/errors.py (bottom import-linter layer);
   quant/config.py sits just above quant.schemas. schemas.ddl_sql now raises ConfigError as
   promised in the P0-02 entry.
+
+## 2026-07-12 — P0-04
+- Doc 06 "registry upsert idempotent by (source, logical_date)" vs doc 08 "supersession
+  creates a new row" reconciled via content-addressed filenames ({source}-{date}-{sha12}):
+  identical bytes → complete no-op (the DoD); changed bytes → new file + appended row;
+  nothing overwritten or deleted; landed raw files are chmod 0o444.
+- Crash-safety ordering: file lands (tmp + fsync + atomic rename) BEFORE its registry row,
+  so a crash between the two heals on the next ingest; a registered-but-missing file is
+  restored without a new row and logged as a warning.
+- fetched_at is naive UTC (matches the timestamp[us] contract); injectable for tests.
+  Global structlog JSON config is deferred to P0-06 CLI wiring — store logs via defaults.
