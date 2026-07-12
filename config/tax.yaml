@@ -1,0 +1,14 @@
+# Effective-dated Indian capital-gains parameters for equity delivery (doc 12). Units:
+# *_rate fields are decimal fractions; ltcg_exemption_per_fy is flat rupees per fiscal year.
+# Re-verify on every budget day (doc 17).
+#
+# Single verified epoch by design (Finance (No.2) Act 2024, in force 2024-07-23): any earlier
+# date fails loudly (ConfigError). Historical epochs are added by P1-03 with its golden tax
+# scenario — never guessed.
+entries:
+  - effective_from: 2024-07-23
+    stcg_rate: 0.20 # short-term rate (holding <= stcg_holding_days_max)
+    ltcg_rate: 0.125 # long-term rate, on gains above the FY exemption
+    ltcg_exemption_per_fy: 125000 # aggregate LTCG exemption per fiscal year
+    stcg_holding_days_max: 365 # <= 365 days held => STCG (doc 21 §8)
+    dividend_slab_rate: 0.30 # dividends taxed at operator slab (default 30%)

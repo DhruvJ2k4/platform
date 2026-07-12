@@ -14,6 +14,7 @@ from typing import Any
 import pandas as pd
 import pandera.pandas as pan
 
+from quant.errors import ConfigError
 from quant.schemas.curated import (
     CorporateActions,
     Events,
@@ -55,8 +56,7 @@ def ddl_sql(table: str) -> str:
         raise KeyError(f"unknown table {table!r}; known: {sorted(TABLES)}")
     path = SCHEMAS_DIR / f"{table}.sql"
     if not path.is_file():
-        # ConfigError replaces this when the P0-03 exception taxonomy lands.
-        raise FileNotFoundError(
+        raise ConfigError(
             f"authoritative DDL missing at {path}; quant.schemas requires a repo checkout"
         )
     return path.read_text(encoding="utf-8")

@@ -25,3 +25,14 @@
 - quant.schemas deliberately imports no duckdb so engine → schemas stays clean under
   import-linter's transitive forbidden check. The DDL loader raises FileNotFoundError until the
   P0-03 exception taxonomy provides ConfigError.
+
+## 2026-07-12 — P0-03
+- `pyyaml` declared as a runtime dependency (was only transitively present via pre-commit);
+  yaml configs are designed-in (docs 20/23), flagged and approved in the plan.
+- Rate files carry a single verified epoch (effective_from 2024-07-23, Finance (No.2) Act
+  2024 / doc-12 rates). Dates before it fail loudly by design; P1-02/P1-03 add golden-tested
+  historical epochs. Custom Decimal-preserving YAML loader guarantees rates never exist as
+  binary floats.
+- Doc-23 exception taxonomy landed in quant/errors.py (bottom import-linter layer);
+  quant/config.py sits just above quant.schemas. schemas.ddl_sql now raises ConfigError as
+  promised in the P0-02 entry.

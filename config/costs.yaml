@@ -1,0 +1,18 @@
+# Effective-dated Indian delivery-equity cost rates (doc 12). Units: *_rate fields are
+# decimal fractions of traded value (0.001 = 0.10%); *_per_* fields are flat rupee amounts.
+# Re-verify on every budget day (doc 17). GST applies to (brokerage + exchange txn + SEBI);
+# that arithmetic lives in the P1-02 cost calculator, not here.
+#
+# Single verified epoch by design: any date before the first epoch fails loudly (ConfigError).
+# Historical epochs are added by P1-02 alongside its hand-computed golden tests — never guessed.
+entries:
+  - effective_from: 2024-07-23
+    brokerage_delivery_rate: 0 # Zerodha delivery brokerage; per-broker adapterized (ADR-011)
+    stt_buy_rate: 0.001 # STT 0.10%, buy side
+    stt_sell_rate: 0.001 # STT 0.10%, sell side
+    stamp_buy_rate: 0.00015 # stamp duty 0.015%, buy side only
+    exchange_txn_rate: 0.0000297 # NSE transaction charge ~0.00297%
+    sebi_rate: 0.000001 # SEBI turnover fee, ₹10 per crore
+    gst_rate: 0.18 # 18% on (brokerage + exchange txn + SEBI)
+    dp_per_isin_sell_day: 15.9 # DP charge per ISIN per sell day
+    amc_per_year: 300 # demat AMC, portfolio-level, per year
