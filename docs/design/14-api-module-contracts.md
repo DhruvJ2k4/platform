@@ -19,7 +19,7 @@ inject data and clock (ADR-016). No other cross-module Python API is public: mod
 communicate through curated/operational tables (doc 10) and run artifacts.
 
 ## Data contracts
-Authoritative schemas live in `schemas/` (pandera + SQL DDL, versioned with code);
-doc 10 mirrors them. Contract-change policy: additive by default; breaking changes need
+Authoritative SQL DDL lives in `schemas/`, with the importable pandera models in
+`quant.schemas` (ADR-021), versioned with code; doc 10 mirrors them. Contract-change policy: additive by default; breaking changes need
 an ADR + rebuild. `Decision.reasons` schema: `[{rule_id, params, evidence_refs[]}]` —
 the explainability contract every UI/report/agent consumes.

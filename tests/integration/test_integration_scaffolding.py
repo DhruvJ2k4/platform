@@ -20,6 +20,7 @@ PACKAGES = [
     "quant.ledger",
     "quant.ops",
     "quant.reports",
+    "quant.schemas",
 ]
 
 

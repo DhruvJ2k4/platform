@@ -53,6 +53,8 @@ select = ["E", "W", "F", "I", "UP", "B", "C4", "SIM", "RUF", "D100", "D104"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D100", "D104"]
+# prices_adj mirrors doc-10 column names verbatim, including "l" (low).
+"src/quant/schemas/curated.py" = ["E741"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -85,6 +87,7 @@ layers = [
     "quant.features",
     "quant.curate",
     "quant.ingest",
+    "quant.schemas",
 ]
 
 [[tool.importlinter.contracts]]

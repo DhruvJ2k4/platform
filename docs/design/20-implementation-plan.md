@@ -6,7 +6,7 @@
 platform/
 ├── pyproject.toml  uv.lock  .github/workflows/ci.yml
 ├── config/          # books/*.yaml costs.yaml tax.yaml liquidity.yaml sources.yaml
-├── schemas/         # SQL DDL + pandera contracts (the real interfaces)
+├── schemas/         # SQL DDL (authoritative); pandera models: src/quant/schemas/ (ADR-021)
 ├── src/quant/
 │   ├── ingest/      # one adapter per source (bhavcopy, ca, filings, surveillance, tri)
 │   ├── curate/      # parsers/ (per format epoch), adjuster, master, universe, events
