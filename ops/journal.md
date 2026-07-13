@@ -62,3 +62,20 @@
   Two reviewers hit the org's monthly agent spend limit mid-run; their checks were executed
   inline instead. Newly added agent names register at session start — same-session use
   falls back to general-purpose + "adopt the agent file's mandate".
+
+## 2026-07-13 — P0-05
+- NSE's edge gates on CLIENT SHAPE more than IP. Archives hosts: 200 with four browser
+  headers (UA/Accept/Accept-Language/Referer), 403 bare-UA — P0-06's adapter must send all
+  four. www API: 403 pre-cookie for httpx AND curl, from residential AND datacenter alike →
+  TLS-fingerprint gating; the P0-21 collector needs a browser-grade client.
+- Epoch map final: classic-11 (≤2011-01), classic-13 (+TOTALTRADES,ISIN; H1-2011→2024-06),
+  UDiFF-34 (2024-07-08→). 13 dated samples hoarded via RawStore. Parser plan: dispatch on
+  header signature with an explicit allowlist (unknown header = ParseError); 2 parsers,
+  3 fixtures; pre-2011 rows carry no ISIN → P0-09 resolves that era via (symbol, series).
+- DC fallback (single Google Cloud vantage): archives tolerated → ADR-009's fallback path is
+  alive for bhavcopy; ADR-009 itself unchanged. Announcements portal archive reaches ≥
+  Jan-2015 WITH broadcast timestamps; attachment PDFs served from the tolerant nsearchives
+  host. Request discipline held: ≤25 residential + 4 DC; both 403s triggered immediate stops.
+- Desk-panel debut: portfolio-manager reviewed the plan pre-approval (1 WARN + 2 NOTEs, all
+  folded in). Post-change review executed inline (docs-only diff + spike scripts; agent
+  budget conserved after earlier 429s).

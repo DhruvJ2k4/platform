@@ -1,5 +1,5 @@
 # 15 · Infrastructure & Deployment
-**Summary:** One home box, cron, GitHub CI for code only, encrypted cloud backup, no inbound network. **Purpose:** ops-ready environment spec. **Assumptions:** ADR-009. **Risks:** home power/ISP (accepted, healed). **Open questions:** P0 IP-tolerance spike (fallback path only).
+**Summary:** One home box, cron, GitHub CI for code only, encrypted cloud backup, no inbound network. **Purpose:** ops-ready environment spec. **Assumptions:** ADR-009. **Risks:** home power/ISP (accepted, healed). **Open questions:** none — the P0 IP-tolerance spike (fallback path only) is resolved in doc 09's P0-05 findings.
 
 **Dev environment:** workstation; `uv sync` from lockfile; `platform curate --rebuild`
 against a raw subset fixture; pre-commit = ruff + pytest-fast.
