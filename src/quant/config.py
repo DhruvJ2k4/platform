@@ -127,6 +127,38 @@ def _load_schedule(path: Path, schedule_type: type[Any]) -> Any:
         raise ConfigError(f"invalid config {path}: {exc}") from exc
 
 
+class SourceSpec(BaseModel):
+    """One source-endpoint spec from config/sources.yaml (headers per doc 09 P0-05 findings)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    url_template: str
+    delay_seconds: float = Field(ge=0)
+    timeout_seconds: float = Field(gt=0)
+    headers: dict[str, str]
+
+
+def load_sources(settings: Settings | None = None) -> dict[str, SourceSpec]:
+    """Load config/sources.yaml as {source_name: SourceSpec}; failures are loud ConfigErrors."""
+    s = settings or Settings()
+    path = s.config_dir / "sources.yaml"
+    data = load_yaml(path)
+    if not isinstance(data, dict):
+        raise ConfigError(f"invalid config {path}: expected a mapping of source specs")
+    try:
+        return {name: SourceSpec.model_validate(spec) for name, spec in data.items()}
+    except ValidationError as exc:
+        raise ConfigError(f"invalid config {path}: {exc}") from exc
+
+
+def source_spec(name: str, settings: Settings | None = None) -> SourceSpec:
+    """Return one source's spec; unknown names fail loudly with the known list."""
+    sources = load_sources(settings)
+    if name not in sources:
+        raise ConfigError(f"unknown source {name!r}; known sources: {sorted(sources)}")
+    return sources[name]
+
+
 def load_costs(settings: Settings | None = None) -> RateSchedule[CostRates]:
     """Load config/costs.yaml as an effective-dated cost-rate schedule."""
     s = settings or Settings()

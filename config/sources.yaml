@@ -1,0 +1,13 @@
+# Source endpoint specs (doc 09, P0-05 findings 2026-07-13). ALL FOUR headers are required:
+# NSE's Akamai edge returns 403 to a bare User-Agent even from a residential IP. Politeness
+# is non-negotiable: delay_seconds applies BEFORE every request; 403/429 aborts, never
+# retry-hammers. CI and tests never contact these endpoints (committed fixtures only).
+bhavcopy:
+  url_template: "https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_{yyyymmdd}_F_0000.csv.zip"
+  delay_seconds: 3.5
+  timeout_seconds: 30
+  headers:
+    User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+    Accept: "*/*"
+    Accept-Language: "en-US,en;q=0.9"
+    Referer: "https://www.nseindia.com/"

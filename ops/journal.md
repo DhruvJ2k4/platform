@@ -79,3 +79,18 @@
 - Desk-panel debut: portfolio-manager reviewed the plan pre-approval (1 WARN + 2 NOTEs, all
   folded in). Post-change review executed inline (docs-only diff + spike scripts; agent
   budget conserved after earlier 429s).
+
+## 2026-07-13 — P0-06
+- First adapter live: `platform ingest bhavcopy --since 2026-05-25 --until 2026-07-10` →
+  stored=32, noop=1 (2026-07-08, hoarded during P0-05 — live idempotency proof), holiday=2
+  (real mid-week 404s on 2026-05-28 and 2026-06-26, logged as expected absence, exit 0).
+  DoD "30 recent days ingested" met with margin; 33 distinct trading days in range.
+- "Holiday 404 handled via calendar" at P0-06 = weekends skipped by the range iterator +
+  weekday 404 recorded as a presence signal for P0-08 (the calendar derives FROM bhavcopy
+  presence and cannot pre-exist the adapter); the presence↔calendar cross-check lands with
+  P0-08. PM plan review (3 WARN + 2 NOTE) shaped: range ends at last COMPLETED day, widened
+  for unconditional ≥30; testzip() CRC gate; --until/--json recorded as additive doc-14
+  extensions.
+- Recorded deferral, not deviation: 403/429 → abort-on-first-error for foreground backfills;
+  doc 06 §6.1's exponential-backoff + alert IP-block mode belongs to the nightly-cron era
+  and lands with P0-17 alerting.
