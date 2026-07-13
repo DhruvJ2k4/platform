@@ -40,11 +40,17 @@ request/client shape, not (only) IP:
 | E2 classic-13 | 2011-07-13 → 2024-06 (boundary inside H1-2011) | same as E1 | E1 + `TOTALTRADES,ISIN,` |
 | E3 UDiFF-34 | 2024-07-08 → present | `nsearchives…/content/cm/BhavCopy_NSE_CM_0_0_0_{YYYYMMDD}_F_0000.csv.zip` | `TradDt,BizDt,Sgmt,…,Rsvd4` (34 cols) |
 
-**Parser plan (feeds P0-07, sizing toward its 8h low end):** dispatch on *header signature*,
-never on date. Two parsers: `classic` (one code path; treats `TOTALTRADES`/`ISIN` as optional
-columns and pins BOTH observed signatures in an explicit allowlist — an unknown signature is a
-ParseError, never a guess) and `udiff` (34-col; filter `SctySrs == EQ` per ADR-006; `Sgmt/Src`
-sanity-checked). One trimmed fixture per signature (3 fixtures) cut from the hoarded samples.
+**Parser plan (shipped as P0-07):** dispatch on *header signature*, never on date. Two
+parsers: `classic` (one code path; `TOTALTRADES`/`ISIN` optional; BOTH observed signatures in
+an explicit allowlist — an unknown signature is a ParseError, never a guess) and `udiff`
+(34-col; `Sgmt`/`Src`/`FinInstrmTp` single-valued `CM`/`NSE`/`STK`, drift = ParseError).
+Parsers retain **all** series (raw fidelity — filtering at parse would sever EQ→BE→EQ price
+history); ADR-006's structural EQ-only exclusion is enforced at its single choke point, the
+universe candidate filter (doc 21 §4). Corrects this section's earlier "filter SctySrs == EQ"
+line, which put the filter at the wrong layer. One trimmed fixture per signature (3 fixtures)
+cut from the hoarded samples. Measured row-count envelope (all 45 registered raw files parse,
+zero failures, 2026-07-13): classic-11 1,358–1,468 · classic-13 1,516–2,757 (monotone by
+year) · udiff 2,802–3,479 — the "sane" reference band for the DQ gate.
 Implication flagged for P0-09: pre-2011 rows have **no ISIN** — the security master must
 resolve that era via effective-dated (symbol, series) listings.
 `sec_bhavdata_full_{DDMMYYYY}.csv` (delivery quantities) noted as a P0-13 candidate; not

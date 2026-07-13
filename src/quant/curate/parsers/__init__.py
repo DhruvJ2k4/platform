@@ -4,3 +4,7 @@ Contract (docs 06 §6.2, 09): each parser maps one raw file format epoch to type
 (bytes in, rows out), and is pinned by fixture tests per epoch. Format drift creates a new parser
 version rather than mutating an old one, so historical raw remains parseable forever.
 """
+
+from quant.curate.parsers.bhavcopy import ParsedBhavcopy, parse_bhavcopy
+
+__all__ = ["ParsedBhavcopy", "parse_bhavcopy"]

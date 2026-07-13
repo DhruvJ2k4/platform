@@ -5,7 +5,10 @@ is the Arrow path (arrow_frame), which preserves DECIMAL(p,s) exactly; the float
 .df() shortcut is banned for money-bearing reads. TABLES maps exact table name -> model and
 ddl_sql() returns the authoritative DDL, so DuckDB tables, models, and doc 10 cannot drift
 silently. This package imports no platform modules and no duckdb, keeping every layer above it
-(engine included) free to import contracts without violating purity rules.
+(engine included) free to import contracts without violating purity rules. The contract
+plumbing (Contract, field, dec, dtype constants) is re-exported for inter-module INTERFACE
+contracts (e.g. parser→curation shapes) — such contracts deliberately stay OUTSIDE
+TABLES/doc-10 governance; only doc-10 tables enter the TABLES registry.
 """
 
 from pathlib import Path
@@ -15,6 +18,19 @@ import pandas as pd
 import pandera.pandas as pan
 
 from quant.errors import ConfigError
+from quant.schemas._dtypes import (
+    BOOL,
+    DATE,
+    F64,
+    I32,
+    I64,
+    STR,
+    STR_LIST,
+    TS,
+    Contract,
+    dec,
+    field,
+)
 from quant.schemas.curated import (
     CorporateActions,
     Events,
@@ -72,8 +88,17 @@ def arrow_frame(rel: Any) -> pd.DataFrame:
 
 
 __all__ = [
+    "BOOL",
+    "DATE",
+    "F64",
+    "I32",
+    "I64",
     "SCHEMAS_DIR",
+    "STR",
+    "STR_LIST",
     "TABLES",
+    "TS",
+    "Contract",
     "CorporateActions",
     "Events",
     "Fill",
@@ -91,4 +116,6 @@ __all__ = [
     "UniverseMembership",
     "arrow_frame",
     "ddl_sql",
+    "dec",
+    "field",
 ]

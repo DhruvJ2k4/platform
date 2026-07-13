@@ -94,3 +94,16 @@
 - Recorded deferral, not deviation: 403/429 → abort-on-first-error for foreground backfills;
   doc 06 §6.1's exponential-backoff + alert IP-block mode belongs to the nightly-cron era
   and lands with P0-17 alerting.
+
+## 2026-07-13 — P0-07
+- Three-epoch parser landed (quant/curate/parsers/bhavcopy.py): exact-header allowlist
+  dispatch, ParseError on unknown signatures and on UDiFF invariant drift (Sgmt/Src/
+  FinInstrmTp) — the new-epoch alarm. Money is Decimal from first parse into decimal128(p,s).
+- Corrected my own P0-05 doc-09 note: series filtering moved OFF the parser to the universe
+  candidate layer (doc 21 §4 / ADR-006 single choke point) — parser filtering would have
+  severed EQ→BE→EQ price history. Regression-locked by the non-EQ-survives tests.
+- PM plan review caught my guessed row-count band being falsified by on-disk files; the band
+  is now a measured output: all 45 registered raw files parse with zero failures — classic-11
+  1,358–1,468 · classic-13 1,516–2,757 · udiff 2,802–3,479 (recorded in doc 09 for the DQ
+  gate). ParsedBhavcopy is an interface contract, deliberately outside TABLES/doc-10
+  governance (guard noted in quant.schemas docstring).
