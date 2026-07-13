@@ -67,6 +67,19 @@ When reality contradicts a doc, stop and surface it — never silently deviate
   the same pass. Code and docs must never disagree silently.
 - When a doc-20 DoD is ambiguous, ask; do not guess on money paths.
 
+## Skills & review agents (all models follow these — no improvising the process)
+- `/task` — the master workflow for ANY doc-20 task, edit, refactor, or maintenance change
+  (read-docs-first → plan gate → probes → implement → verify → review → doc propagation → ship).
+- `/verify` — CI-parity battery + red→green enforcement proofs + live DoD demo; run before
+  every commit; never claim green without shown output.
+- `/review-domains` — parallel fan-out of the `.claude/agents/` reviewers, selected by
+  surface: engineering panel (arch-purity-guard, money-auditor, contract-auditor,
+  docs-warden, test-warden) + quant-desk panel (quant-researcher, risk-manager,
+  execution-trader, portfolio-manager — these also review plans/ideas, and
+  portfolio-manager reviews every plan before approval); fix findings, re-run `/verify`.
+- `/ship` — commit / push / watch-Actions-to-green protocol; a task is shipped only when
+  the Actions run on the pushed commit is green.
+
 ## Commands
 ```bash
 uv sync                        # install deps

@@ -14,8 +14,11 @@ dist/
 # Raw + operational data stores (never committed; doc 08)
 data/
 
-# Claude Code workspace
-.claude/
+# Claude Code workspace (committed: skills, agents, settings; ignored: session cruft)
+.claude/*
+!.claude/skills/
+!.claude/agents/
+!.claude/settings.json
 
 # macOS
 .DS_Store

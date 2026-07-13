@@ -47,3 +47,18 @@
   restored without a new row and logged as a warning.
 - fetched_at is naive UTC (matches the timestamp[us] contract); injectable for tests.
   Global structlog JSON config is deferred to P0-06 CLI wiring — store logs via defaults.
+
+## 2026-07-13 — ops: process encoded as skills + review agents
+- The P0-01..04 working discipline is now executable by any model/session: four project
+  skills (.claude/skills/: task, verify, review-domains, ship) and nine read-only reviewers
+  in two panels (.claude/agents/ — engineering: arch-purity-guard, money-auditor,
+  contract-auditor, docs-warden, test-warden; quant desk: quant-researcher, risk-manager,
+  execution-trader, portfolio-manager — the desk panel also reviews plans/ideas), all
+  referenced from CLAUDE.md. .gitignore now commits .claude/skills|agents|settings.json
+  while still ignoring session cruft.
+- Dogfooded on this very change: test-warden ran the full mandate and returned one NOTE
+  (verify skill header overclaimed "exact gates CI runs" — fixed same pass; carried: CI's
+  per-directory pytest split would skip a future suite dir outside the four known ones).
+  Two reviewers hit the org's monthly agent spend limit mid-run; their checks were executed
+  inline instead. Newly added agent names register at session start — same-session use
+  falls back to general-purpose + "adopt the agent file's mandate".
