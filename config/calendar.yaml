@@ -1,0 +1,9 @@
+# Muhurat (Diwali evening) session dates — operator-maintained, one per year, sourced from
+# NSE circulars; verified against bhavcopy presence. Needed because the data alone cannot
+# identify Muhurat: every UDiFF file carries SsnId=F1 (measured 498/498 on 2026-07-14,
+# including Muhurat 2024-11-01 and 2025-10-21), and weekend presence also matches NSE's
+# DR-drill and Budget-day special sessions. Reviewed at the doc-17 annual pass.
+muhurat_dates:
+  - 2023-11-12
+  - 2024-11-01
+  - 2025-10-21

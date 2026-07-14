@@ -49,6 +49,9 @@ def ingest(
     date: str | None = typer.Option(None, "--date", help="single ISO date"),
     since: str | None = typer.Option(None, "--since", help="range start, ISO date"),
     until: str | None = typer.Option(None, "--until", help="range end, ISO date (default today)"),
+    weekends: bool = typer.Option(
+        False, "--include-weekends", help="also request Sat/Sun (calendar-grade presence)"
+    ),
     json_out: bool = typer.Option(False, "--json", help="print a JSON summary"),
 ) -> None:
     """Ingest one source for a date or range (doc 14); idempotent; exit 1 on failure."""
@@ -60,12 +63,15 @@ def ingest(
         spec = source_spec(source)
         if date is not None:
             first = last = _parse_iso(date, "--date")
+            weekends = True  # an explicitly requested date is always fetched
         else:
             first = _parse_iso(since, "--since")  # type: ignore[arg-type]
             last = _parse_iso(until, "--until") if until is not None else datetime.date.today()
         store = RawStore(Settings())
         with _make_client() as client:
-            summary = bhavcopy.fetch_range(first, last, store=store, spec=spec, client=client)
+            summary = bhavcopy.fetch_range(
+                first, last, store=store, spec=spec, client=client, weekends=weekends
+            )
     except PlatformError as exc:
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(1) from exc

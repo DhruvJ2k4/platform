@@ -35,10 +35,10 @@ class Listing(Contract):
 
 
 class TradingCalendar(Contract):
-    """trading_calendar: derived from bhavcopy presence; session values firm up with P0-08."""
+    """trading_calendar: derived from bhavcopy presence; session enum defined by P0-08."""
 
     d: pd.ArrowDtype = field(DATE, nullable=False, unique=True)
-    session: pd.ArrowDtype = field(STR, nullable=True)
+    session: pd.ArrowDtype = field(STR, nullable=True, isin=["normal", "special", "muhurat"])
 
 
 class PricesAdj(Contract):

@@ -136,6 +136,9 @@ class SourceSpec(BaseModel):
     delay_seconds: float = Field(ge=0)
     timeout_seconds: float = Field(gt=0)
     headers: dict[str, str]
+    # Era-aware backfill: dates <= classic_until fetch from classic_url_template instead.
+    classic_url_template: str | None = None
+    classic_until: date | None = None
 
 
 def load_sources(settings: Settings | None = None) -> dict[str, SourceSpec]:
@@ -157,6 +160,20 @@ def source_spec(name: str, settings: Settings | None = None) -> SourceSpec:
     if name not in sources:
         raise ConfigError(f"unknown source {name!r}; known sources: {sorted(sources)}")
     return sources[name]
+
+
+def load_muhurat_dates(settings: Settings | None = None) -> frozenset[date]:
+    """Operator-maintained Muhurat session dates from config/calendar.yaml (P0-08 finding:
+    neither UDiFF SsnId nor weekend presence can identify Muhurat from data alone)."""
+    s = settings or Settings()
+    path = s.config_dir / "calendar.yaml"
+    data = load_yaml(path)
+    if not isinstance(data, dict) or "muhurat_dates" not in data:
+        raise ConfigError(f"invalid config {path}: expected a 'muhurat_dates' list")
+    dates = data["muhurat_dates"]
+    if not isinstance(dates, list) or not all(isinstance(d, date) for d in dates):
+        raise ConfigError(f"invalid config {path}: muhurat_dates must be a list of ISO dates")
+    return frozenset(dates)
 
 
 def load_costs(settings: Settings | None = None) -> RateSchedule[CostRates]:

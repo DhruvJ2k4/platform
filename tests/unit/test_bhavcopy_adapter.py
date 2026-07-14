@@ -136,6 +136,44 @@ class TestFetchRange:
         )
         assert again.stored == 0 and again.noop == 4 and again.holiday == 1
 
+    def test_classic_era_uses_classic_url(self, store: RawStore, spec) -> None:
+        """Era-aware backfill: pre-cutover dates hit the classic archive pattern (doc 09)."""
+        requested: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requested.append(str(request.url))
+            return httpx.Response(404)
+
+        bhavcopy.fetch(
+            date(2019, 1, 16), store=store, spec=spec, client=_client(handler), sleep=_no_sleep
+        )
+        bhavcopy.fetch(
+            date(2026, 7, 8), store=store, spec=spec, client=_client(handler), sleep=_no_sleep
+        )
+        assert "cm16JAN2019bhav.csv.zip" in requested[0]
+        assert "content/historical/EQUITIES/2019/JAN" in requested[0]
+        assert "BhavCopy_NSE_CM_0_0_0_20260708_F_0000.csv.zip" in requested[1]
+
+    def test_weekends_flag_requests_saturday_and_sunday(self, store: RawStore, spec) -> None:
+        """Muhurat can fall on a weekend (Sun 2023-11-12); calendar-grade presence needs it."""
+        requested: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requested.append(str(request.url))
+            return httpx.Response(404)
+
+        summary = bhavcopy.fetch_range(
+            date(2026, 6, 5),  # Friday
+            date(2026, 6, 8),  # Monday
+            store=store,
+            spec=spec,
+            client=_client(handler),
+            sleep=_no_sleep,
+            weekends=True,
+        )
+        assert len(requested) == 4  # Fri, Sat, Sun, Mon all requested
+        assert summary.holiday == 4
+
     def test_until_before_since_rejected(self, store: RawStore, spec) -> None:
         with pytest.raises(ConfigError, match="before"):
             bhavcopy.fetch_range(
@@ -176,6 +214,23 @@ class TestCli:
         assert result.exit_code == 0, result.output
         payload = json.loads(result.stdout.strip().splitlines()[-1])
         assert payload["stored"] == 3 and payload["until"] == "2026-06-03"
+
+    def test_explicit_weekend_date_is_fetched(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """--date on a Sunday must request (Muhurat 2023-11-12 was a Sunday), not skip."""
+        monkeypatch.setenv("PLATFORM_DATA_DIR", str(tmp_path / "data"))
+        requested: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requested.append(str(request.url))
+            return httpx.Response(404)
+
+        monkeypatch.setattr(quant.cli, "_make_client", lambda: _client(handler))
+        result = CliRunner().invoke(app, ["ingest", "bhavcopy", "--date", "2023-11-12", "--json"])
+        assert result.exit_code == 0, result.output
+        assert len(requested) == 1
+        assert "cm12NOV2023bhav.csv.zip" in requested[0]  # classic era + weekend both honored
 
     def test_unknown_source_exits_nonzero(self) -> None:
         result = CliRunner().invoke(app, ["ingest", "mystery", "--date", "2026-07-08"])

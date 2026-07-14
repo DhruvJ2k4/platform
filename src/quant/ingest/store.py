@@ -103,6 +103,20 @@ class RawStore:
         rows = self.history(source, logical_date)
         return rows[-1] if rows else None
 
+    def latest_per_date(self, source: str) -> list[RawArtifact]:
+        """The artifact in force (max fetched_at) for EVERY logical_date of a source, ascending."""
+        _validate_source(source)
+        with self._connect() as con:
+            rel = con.sql(
+                "SELECT * FROM raw_registry WHERE source = ? QUALIFY row_number() "
+                "OVER (PARTITION BY logical_date ORDER BY fetched_at DESC) = 1 "
+                "ORDER BY logical_date",
+                params=[source],
+            )
+            frame = arrow_frame(rel)
+        validated = RawRegistry.validate(frame, lazy=True)
+        return [self._artifact_from(row) for row in validated.itertuples(index=False)]
+
     def history(self, source: str, logical_date: date) -> list[RawArtifact]:
         """All registered artifacts for (source, logical_date), ascending by fetched_at."""
         _validate_source(source)
@@ -114,16 +128,23 @@ class RawStore:
             )
             frame = arrow_frame(rel)
         validated = RawRegistry.validate(frame, lazy=True)
-        artifacts = []
-        for row in validated.itertuples(index=False):
-            logical = row.logical_date
-            if isinstance(logical, datetime):
-                logical = logical.date()
-            fetched = row.fetched_at
-            if hasattr(fetched, "to_pydatetime"):
-                fetched = fetched.to_pydatetime()
-            artifacts.append(RawArtifact(row.source, logical, Path(row.path), row.sha256, fetched))
-        return artifacts
+        return [self._artifact_from(row) for row in validated.itertuples(index=False)]
+
+    @staticmethod
+    def _artifact_from(row: object) -> RawArtifact:
+        logical = row.logical_date  # type: ignore[attr-defined]
+        if isinstance(logical, datetime):
+            logical = logical.date()
+        fetched = row.fetched_at  # type: ignore[attr-defined]
+        if hasattr(fetched, "to_pydatetime"):
+            fetched = fetched.to_pydatetime()
+        return RawArtifact(
+            row.source,  # type: ignore[attr-defined]
+            logical,
+            Path(row.path),  # type: ignore[attr-defined]
+            row.sha256,  # type: ignore[attr-defined]
+            fetched,
+        )
 
     def _path_for(self, source: str, logical_date: date, sha: str, suffix: str) -> Path:
         name = f"{source}-{logical_date.isoformat()}-{sha[:_SHA_PREFIX_LEN]}{suffix}"

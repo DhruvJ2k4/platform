@@ -13,7 +13,7 @@ CREATE TABLE security (isin TEXT PRIMARY KEY, name TEXT, status TEXT,           
   first_listed DATE, delisted_on DATE, delist_terminal_price DECIMAL(12,2));
 CREATE TABLE listing (isin TEXT, exchange TEXT, symbol TEXT, series TEXT,
   valid_from DATE, valid_to DATE);                                              -- effective-dated ticker map
-CREATE TABLE trading_calendar (d DATE PRIMARY KEY, session TEXT);              -- derived from bhavcopy presence
+CREATE TABLE trading_calendar (d DATE PRIMARY KEY, session TEXT);              -- from bhavcopy presence; session: normal|special|muhurat (P0-08)
 CREATE TABLE prices_adj (isin TEXT, d DATE, exchange TEXT, series TEXT,
   o DECIMAL(12,2), h DECIMAL(12,2), l DECIMAL(12,2), c DECIMAL(12,2),
   close_unadj DECIMAL(12,2), volume BIGINT, traded_value DECIMAL(18,2),

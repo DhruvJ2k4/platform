@@ -107,3 +107,23 @@
   1,358–1,468 · classic-13 1,516–2,757 · udiff 2,802–3,479 (recorded in doc 09 for the DQ
   gate). ParsedBhavcopy is an interface contract, deliberately outside TABLES/doc-10
   governance (guard noted in quant.schemas docstring).
+
+## 2026-07-14 — P0-08
+- Adapter extended (additive) for calendar-grade backfills: era-aware URLs (classic archive
+  pattern ≤ 2024-07-07 via sources.yaml classic_url_template — the P0-06 UDiFF-only adapter
+  would have 404'd all pre-cutover dates and poisoned presence) and --include-weekends
+  (Muhurat 2023-11-12 was a SUNDAY; an explicit --date now always fetches).
+- 3-year backfill: 2023-07-01..2026-05-22 with weekends → stored=713, holiday/absent=340,
+  zero failures. Raw vault now holds ~758 trading days of bhavcopy.
+- Session-taxonomy finding (data-driven, closes doc 10's open note): every UDiFF file
+  carries SsnId=F1 — 498/498, INCLUDING Muhurat 2024-11-01 and 2025-10-21 — so the data
+  alone cannot identify Muhurat; and weekend presence also matches NSE DR-drill Saturdays
+  (2024-01-20/03-02/05-18) and Budget-day sessions (2025-02-01, 2026-02-01). Final enum:
+  normal | special (weekend presence or non-F1 SsnId drift alarm) | muhurat (operator-
+  maintained config/calendar.yaml, NSE-circular-sourced; reviewed at the doc-17 annual pass).
+- Live DoD: 750 trading days across 3 sample years (2024: 249, 2025: 249); 10 known
+  holidays absent; muhurat exactly [2023-11-12, 2024-11-01, 2025-10-21]; specials correctly
+  separated. Closes the P0-06 carried clause (presence↔calendar cross-check). Calendar
+  persistence into the curated store lands with P0-11's atomic publish (builder returns a
+  validated frame for now). Classic-era weekday-Muhurat limitation resolved via config, not
+  heuristics. Post-diff reviews inline again (org agent spend limit).

@@ -55,7 +55,7 @@ def fetch(
     freeze the real function object at import).
     """
     (sleep if sleep is not None else time.sleep)(spec.delay_seconds)
-    url = spec.url_template.format(yyyymmdd=d.strftime("%Y%m%d"))
+    url = _url_for(d, spec)
     resp = client.get(url, headers=spec.headers, timeout=spec.timeout_seconds)
     if resp.status_code == 404:
         log.info("ingest_holiday_404", source=SOURCE, logical_date=str(d))
@@ -79,6 +79,17 @@ def fetch(
     return artifact, created
 
 
+_MONTHS_ABBR = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+
+
+def _url_for(d: date, spec: SourceSpec) -> str:
+    """Era-aware URL: classic archive pattern before the UDiFF cutover (doc 09 epoch map)."""
+    if spec.classic_until is not None and spec.classic_url_template and d <= spec.classic_until:
+        mmm = _MONTHS_ABBR[d.month - 1]
+        return spec.classic_url_template.format(yyyy=f"{d.year:04d}", mmm=mmm, dd=f"{d.day:02d}")
+    return spec.url_template.format(yyyymmdd=d.strftime("%Y%m%d"))
+
+
 def fetch_range(
     since: date,
     until: date,
@@ -87,14 +98,20 @@ def fetch_range(
     spec: SourceSpec,
     client: httpx.Client,
     sleep: Callable[[float], None] | None = None,
+    weekends: bool = False,
 ) -> IngestSummary:
-    """Fetch every weekday in [since, until]; aborts on the first SourceError."""
+    """Fetch every weekday (plus weekends when asked) in [since, until]; abort on SourceError.
+
+    weekends=True exists for calendar-grade presence backfills: Muhurat sessions can fall on
+    a weekend (e.g. Sunday 2023-11-12), and skipping Sat/Sun would blind the P0-08 calendar
+    to them. Weekend 404s are expected absence, exactly like weekday holidays.
+    """
     if until < since:
         raise ConfigError(f"--until {until} is before --since {since}")
     stored = noop = holiday = 0
     d = since
     while d <= until:
-        if d.weekday() < 5:  # Sat/Sun are never trading days; holidays surface as 404s
+        if weekends or d.weekday() < 5:  # holidays (and quiet weekends) surface as 404s
             result = fetch(d, store=store, spec=spec, client=client, sleep=sleep)
             if result is None:
                 holiday += 1
