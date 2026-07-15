@@ -34,6 +34,11 @@ Pattern — prove the mechanism actually binds, then restore byte-identically:
    scale, an out-of-order epoch, a mutated golden value…).
 3. Run the relevant gate; show it FAILING and its nonzero exit code.
 4. Revert; `shasum` must match `before` exactly; show the gate green again.
+NOTE for NEW (untracked) files: `git checkout --` cannot restore them — perturb with a
+scripted, exactly-reversible edit (e.g. a python string replace you can invert verbatim)
+and prove restoration by the shasum comparison in step 4 (P0-09 precedent).
+If the gate's code changes AFTER its proof ran, the proof is stale — redo it against the
+current code before shipping.
 Precedents: layer-violation import into engine (lint-imports exit 1); duckdb import into
 engine (forbidden contract); lot.open_price scale flip (pandera SchemaErrors).
 

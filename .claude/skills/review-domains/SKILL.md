@@ -38,6 +38,11 @@ main session) apply fixes. They review two kinds of artifact: a **diff** (code) 
    Fallback: if a named agent type is not registered in this session, spawn
    `general-purpose` and instruct it to first Read the agent's `.claude/agents/<name>.md`
    file and adopt that mandate exactly.
+   Budget fallback: if agent launches die on an org spend limit or terminal API errors,
+   do NOT skip or thin the review — run the panel INLINE in the main session: Read each
+   selected agent's `.claude/agents/<name>.md`, adopt its mandate exactly (one seat at a
+   time, evidence-first, citing file:line), and produce the same findings table. State in
+   the final report AND ops/journal.md that the review ran inline (P0-07/08/09 precedent).
 4. **Triage**: CRITICAL → fix now, no deferrals. WARN → fix now, or record the explicit
    justification in the report AND ops/journal.md if it is a real accepted risk. NOTE →
    fix if ≤5 minutes, else carry in the report. Disputes are answered with evidence

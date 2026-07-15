@@ -1,6 +1,6 @@
 ---
 name: task
-description: Execute a doc-20 platform task (P0/P1/P2/P3) or any nontrivial edit, refactor, or maintenance change end-to-end with this repo's full discipline. Use for ANY codebase change beyond a trivial one-liner — it is the master workflow; it invokes /verify, /review-domains, and /ship at the right checkpoints.
+description: Execute a doc-20 platform task (P0/P1/P2/P3) or any nontrivial edit, refactor, maintenance change, bug fix / debugging session, or schema-contract migration end-to-end with this repo's full discipline. Use for ANY codebase change beyond a trivial one-liner — it is the master workflow; it invokes /verify, /review-domains, and /ship at the right checkpoints.
 ---
 
 # Platform task workflow
@@ -63,6 +63,15 @@ apps; `asof`/`order` being reserved words. Assume nothing about a library; probe
 
 ## 6. Verify → review
 - Run `/verify` (the full battery + red→green enforcement proof + live DoD demo).
+- **The live demo is part of the test harness, not a formality.** When a real-data run
+  contradicts the design or your code: STOP and probe the actual rows first (never patch
+  from the error message alone — P0-09 precedent: five encounters, each looked like "broken
+  data" and was actually a real market mechanism). Each encounter is a doc-vs-reality
+  event: fix it, lock it with a test named after the real case, amend the mini-ADR/journal
+  in the SAME pass, re-run `/verify`, re-run the demo — loop until the demo is clean.
+  Never weaken the demo, a gate, or an assertion to get past a failure. Iterate cheaply by
+  caching expensive intermediates in the session scratchpad, but the final recorded demo
+  must run the real end-to-end path.
 - Run `/review-domains` for any change touching src/quant, schemas/, config/, or CI —
   fix CONFIRMED findings, justify or fix PLAUSIBLE ones, then re-run `/verify`.
 
