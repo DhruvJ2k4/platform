@@ -2,6 +2,17 @@
 # NSE's Akamai edge returns 403 to a bare User-Agent even from a residential IP. Politeness
 # is non-negotiable: delay_seconds applies BEFORE every request; 403/429 aborts, never
 # retry-hammers. CI and tests never contact these endpoints (committed fixtures only).
+symbolchange:
+  # Full-history symbol-change snapshot (P0-09): one CSV, no date placeholder; logical_date
+  # labels the fetch day. Served from the tolerant nsearchives host (P0-05 client-shape gate).
+  url_template: "https://nsearchives.nseindia.com/content/equities/symbolchange.csv"
+  delay_seconds: 3.5
+  timeout_seconds: 30
+  headers:
+    User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+    Accept: "*/*"
+    Accept-Language: "en-US,en;q=0.9"
+    Referer: "https://www.nseindia.com/"
 bhavcopy:
   url_template: "https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_{yyyymmdd}_F_0000.csv.zip"
   # Era-aware backfill (P0-08): dates before the UDiFF cutover (2024-07-08, doc 09 epoch map)

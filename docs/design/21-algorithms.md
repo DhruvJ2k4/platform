@@ -35,12 +35,17 @@ byte-identical.
 
 ## §4 PIT universe builder (pipeline; emit ALL exclusion reasons, not first)
 ```
-candidates = listings active on d, exchange=NSE, series=='EQ'
+candidates = symbols with a price row on d resolving to an ISIN, exchange=NSE, series=='EQ'
 exclude if: price<₹20 | age<180 td | ff_mcap<floor (proxy: rank by MDTV until
   fundamentals mature — flagged) | surveillance in {GSM*, ASM stage≥2} |
   zero_days_pct>5% | pending demerger review
 investable(book) = position_value(book) ≤ p_max · MDTV      # evaluated at query time
 ```
+Candidates line amended by ADR-022 (was "listings active on d"): listing answers identity
+only — NULL valid_from = open past and open-ended valid_to would leak future/dead listings
+into d's candidate set, and day-exact series occupancy (EQ vs BE vs parallel BL/T0) is a
+price-row fact, not a listing-interval fact. Existence and age come from observed price
+rows / universe_membership, never from listing bounds.
 
 ## §5 Factors (v1)
 `mom_12_1 = adj_close[d−21td] / adj_close[d−252td] − 1` (missing history ⇒ NaN ⇒ excluded)

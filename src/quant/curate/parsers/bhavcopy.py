@@ -17,6 +17,7 @@ from decimal import Decimal, InvalidOperation
 import pandas as pd
 import pyarrow as pa
 
+from quant.curate.parsers.common import parse_dmy_date
 from quant.errors import ParseError
 from quant.schemas import DATE, I64, STR, Contract, dec, field
 
@@ -28,21 +29,6 @@ UDIFF_34 = (
     "LastPric,PrvsClsgPric,UndrlygPric,SttlmPric,OpnIntrst,ChngInOpnIntrst,TtlTradgVol,"
     "TtlTrfVal,TtlNbOfTxsExctd,SsnId,NewBrdLotQty,Rmks,Rsvd1,Rsvd2,Rsvd3,Rsvd4"
 )
-
-_MONTHS = {
-    "JAN": 1,
-    "FEB": 2,
-    "MAR": 3,
-    "APR": 4,
-    "MAY": 5,
-    "JUN": 6,
-    "JUL": 7,
-    "AUG": 8,
-    "SEP": 9,
-    "OCT": 10,
-    "NOV": 11,
-    "DEC": 12,
-}
 
 _UDIFF_IDX = {name: i for i, name in enumerate(UDIFF_34.split(","))}
 _UDIFF_INVARIANTS = {"Sgmt": "CM", "Src": "NSE", "FinInstrmTp": "STK"}
@@ -64,6 +50,7 @@ class ParsedBhavcopy(Contract):
     volume: pd.ArrowDtype = field(I64, nullable=True)
     traded_value: pd.ArrowDtype = field(dec(18, 2), nullable=True)
     total_trades: pd.ArrowDtype = field(I64, nullable=True)  # absent in classic-11
+    security_name: pd.ArrowDtype = field(STR, nullable=True)  # UDiFF FinInstrmNm; classic: None
 
 
 _COLUMNS = [
@@ -80,6 +67,7 @@ _COLUMNS = [
     "volume",
     "traded_value",
     "total_trades",
+    "security_name",
 ]
 _ARROW_TYPES = {
     "trade_date": DATE,
@@ -95,6 +83,7 @@ _ARROW_TYPES = {
     "volume": I64,
     "traded_value": dec(18, 2),
     "total_trades": I64,
+    "security_name": STR,
 }
 
 
@@ -148,9 +137,10 @@ def _parse_classic(data_lines: list[str], *, has_isin: bool) -> dict[str, list[o
         cols["prev_close"].append(_decimal(row[7], rownum))
         cols["volume"].append(_integer(row[8], rownum))
         cols["traded_value"].append(_decimal(row[9], rownum))
-        cols["trade_date"].append(_classic_date(row[10], rownum))
+        cols["trade_date"].append(parse_dmy_date(row[10], rownum))
         cols["total_trades"].append(_integer(row[11], rownum) if has_isin else None)
         cols["isin"].append((row[12] or None) if has_isin else None)
+        cols["security_name"].append(None)  # classic epochs carry no instrument name
     return cols
 
 
@@ -179,6 +169,7 @@ def _parse_udiff(data_lines: list[str]) -> dict[str, list[object]]:
         cols["volume"].append(_integer(row[idx["TtlTradgVol"]], rownum))
         cols["traded_value"].append(_decimal(row[idx["TtlTrfVal"]], rownum))
         cols["total_trades"].append(_integer(row[idx["TtlNbOfTxsExctd"]], rownum))
+        cols["security_name"].append(row[idx["FinInstrmNm"]] or None)
     return cols
 
 
@@ -213,15 +204,6 @@ def _integer(value: str, rownum: int) -> int | None:
         return int(value)
     except ValueError as exc:
         raise ParseError(f"row {rownum}: bad integer {value!r}") from exc
-
-
-def _classic_date(value: str, rownum: int) -> date:
-    # DD-MMM-YYYY with English month names; an explicit map avoids locale-dependent %b.
-    try:
-        day, mon, year = value.split("-")
-        return date(int(year), _MONTHS[mon.upper()], int(day))
-    except (ValueError, KeyError) as exc:
-        raise ParseError(f"row {rownum}: bad classic date {value!r}") from exc
 
 
 def _iso_date(value: str, rownum: int) -> date:

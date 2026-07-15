@@ -12,7 +12,8 @@ manifest, 1—N artifacts.
 CREATE TABLE security (isin TEXT PRIMARY KEY, name TEXT, status TEXT,           -- active|delisted|suspended
   first_listed DATE, delisted_on DATE, delist_terminal_price DECIMAL(12,2));
 CREATE TABLE listing (isin TEXT, exchange TEXT, symbol TEXT, series TEXT,
-  valid_from DATE, valid_to DATE);                                              -- effective-dated ticker map
+  valid_from DATE, valid_to DATE);                                              -- effective-dated ticker map; NULL valid_from = open past,
+                                                                                -- NULL valid_to = open-ended; identity only, never existence/age (ADR-022)
 CREATE TABLE trading_calendar (d DATE PRIMARY KEY, session TEXT);              -- from bhavcopy presence; session: normal|special|muhurat (P0-08)
 CREATE TABLE prices_adj (isin TEXT, d DATE, exchange TEXT, series TEXT,
   o DECIMAL(12,2), h DECIMAL(12,2), l DECIMAL(12,2), c DECIMAL(12,2),

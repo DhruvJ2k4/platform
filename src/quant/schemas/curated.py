@@ -24,13 +24,13 @@ class Security(Contract):
 
 
 class Listing(Contract):
-    """listing: effective-dated (exchange, symbol, series) map per ISIN; valid_to NULL = open."""
+    """listing: effective-dated identity map per ISIN; NULL valid_from = open past (ADR-022)."""
 
     isin: pd.ArrowDtype = field(STR, nullable=False)
     exchange: pd.ArrowDtype = field(STR, nullable=False)
     symbol: pd.ArrowDtype = field(STR, nullable=False)
     series: pd.ArrowDtype = field(STR, nullable=False)
-    valid_from: pd.ArrowDtype = field(DATE, nullable=False)
+    valid_from: pd.ArrowDtype = field(DATE, nullable=True)
     valid_to: pd.ArrowDtype = field(DATE, nullable=True)
 
 

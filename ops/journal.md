@@ -127,3 +127,57 @@
   persistence into the curated store lands with P0-11's atomic publish (builder returns a
   validated frame for now). Classic-era weekday-Muhurat limitation resolved via config, not
   heuristics. Post-diff reviews inline again (org agent spend limit).
+
+## 2026-07-15 — P0-09
+- Security master landed (quant/curate/master.py): observations-first construction with the
+  symbolchange file pinning gap boundaries and backdating pre-observation chains (ADR-022).
+  Live file probed+ingested in one request: NO header row (shape validation is the drift
+  alarm, not a header allowlist), depth 1999→present, self-rename artifact rows (dropped by
+  the builder), applicable_from == first trading day under the new symbol for all three
+  vault-verified renames.
+- Probe killed my planned invariant before it shipped: an ISIN legitimately trades the same
+  symbol in MULTIPLE series the same day (EQ+BL block window, EQ+T0, BE+BL — 29/40 sampled
+  files). Interval model is per (isin, symbol, series) with rename boundaries at symbol
+  level; "one series per ISIN-day" would have blocked the build almost daily.
+- Desk-panel plan review (PM 1 WARN + 5 NOTE, QR 5 WARN + 5 NOTE) reshaped the task: doc 21
+  §4 candidates line amended in-pass (open-past listings would leak future/dead names into
+  "listings active on d"); snapshot-truncation invariance became property test #4 (the
+  time-consistency proof); PREVCLOSE splice validator added as the early net for the
+  recycled-symbol limitation; identity-only rule (never existence/age/activity) is a hard
+  requirement forwarded to P0-13.
+- Effort honesty: full surface (adapter + parser + builder + resolver + schema widening +
+  ADR + 5 test files) exceeded doc 20's 8h estimate — recorded as fact, not silent drift.
+  Master persistence follows the P0-08 precedent (validated frames now; P0-11 publishes).
+- Carried to P0-17: symbolchange re-fetch on the nightly list. Carried to P0-19: hit-rate
+  baseline split died-before vs survived-past ISIN coverage; severed-chain counts (ISIN
+  reissue events).
+- Live-demo encounter (fixed same pass): bond ISIN INE148I07ND6 published ONE day
+  (2024-07-26) under the issuer's renamed equity symbol SAMMAANCAP inside its own
+  965IHFL25C span, then moved to 965SCL25C — real overlapping symbol spans for one ISIN.
+  The interleave ContractViolation would have blocked every full-vault build; same-ISIN
+  overlap is not an identity ambiguity, so such spans are now evidence-bounded parallel
+  eras (counted in stats.parallel_spans, warned). Cross-ISIN same-day conflict remains
+  fatal. ADR-022 amended.
+- Breadcrumb for P0-11: bhavcopy holds parallel series rows per (isin, day) (EQ+BL, EQ+T0)
+  but prices_adj's PK is (isin, d) — curation must pick the primary series row per day or
+  the PK is unsatisfiable.
+- Org agent spend limit hit mid-review: the 6-agent post-diff panel died at launch; review
+  executed inline (P0-07/P0-08 precedent).
+- Second live-demo encounter (fixed same pass): an ISIN CHANGE with the symbol kept —
+  AARVEEDEN moved INE273D01019→INE273D01027 — made the new ISIN's chain-backdated era
+  overlap the old ISIN's observed era. Repair now runs three deterministic passes per
+  (symbol, series): synthetic claims yield to any ISIN's observations (clip to after last
+  observation / drop when falsified, stats.synthetic_dropped), open ends retreat to
+  evidence, then a verify pass where any surviving overlap raises. Splice DQ restricted to
+  boundaries ≤7 calendar days wide — with sparse pre-2023 sample days, wider "boundaries"
+  compare prices years apart and are incomparable, not failures.
+- Third and fourth live-demo encounters (fixed same pass): (a) IPAPPM→ANDPAPER→ANDHRAPAP —
+  a MULTI-HOP rename path whose intermediate symbol was never observed; boundary pinning is
+  now gap BRIDGING (walk the rename graph backward inside the gap, cap 6 hops, emit exact
+  synthetic intermediate eras). (b) Rename records are now globally consumed (explained at
+  most once, earliest-observed ISIN first, pins and chains sharing one ledger) and the
+  conflict-repair retreat orders the pair by EVIDENCE, not claim date — otherwise the
+  post-ISIN-change line stole its predecessor's symbol history (ANDHRAPAP, TRIDENT,
+  AARVEEDEN all hit variants of this). Full-vault core build now green: 6,839 securities /
+  10,842 listings; splice DQ 431 pass, 0 fail, 613 incomparable (sparse gaps); 344
+  synthetic eras; 230 chain stops; 586 recycle clips.

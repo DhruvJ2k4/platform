@@ -5,6 +5,7 @@
 |---|---|---|---|---|---|---|---|---|---|
 | NSE bhavcopy (+archives) | Prices/volumes/series incl. delisted | High (official) | Free | Yes by nature | ~20y | File downloads; epochs | Public data | Med (epochs) | **Core** |
 | NSE corporate actions | Adjustments, dividends | High | Free | Yes | Long | File/portal | Public | Med (demergers manual) | **Core** |
+| NSE symbol-change file | Security-master rename boundaries + pre-observation chains | High (official) | Free | Snapshot (identity facts, not signals — ADR-022) | 1999→ | Single CSV, tolerant host | Public | Low | **Core (P0-09)** |
 | NSE filings/announcements (XBRL/CSV) | PIT fundamentals + event layer | High | Free | **Yes (broadcast ts)** | Fwd + partial archive | Portal; bot-sensitive | Public regulatory | Med-high (weakest link; absence-alarms) | **Core (P1 collect-early)** |
 | ASM/GSM surveillance lists | Hard exclusions | High | Free | Yes (daily) | Fwd | File | Public | Low | **Core** |
 | NSE Indices TRI values | Benchmarks | High | Free | Yes | Long | File/portal | Public (values) | Low | **Core** |
@@ -53,6 +54,20 @@ zero failures, 2026-07-13): classic-11 1,358–1,468 · classic-13 1,516–2,757
 year) · udiff 2,802–3,479 — the "sane" reference band for the DQ gate.
 Implication flagged for P0-09: pre-2011 rows have **no ISIN** — the security master must
 resolve that era via effective-dated (symbol, series) listings.
+
+**Symbol-change file (P0-09 probe, 2026-07-15; 1 residential request, stored via RawStore):**
+`https://nsearchives.nseindia.com/content/equities/symbolchange.csv` — HTTP 200 with the four
+browser headers. **No header row**: every line is a data row of exactly
+`(company_name, old_symbol, new_symbol, applicable_from DD-MMM-YYYY)`; the parser's drift
+alarm is therefore strict per-row shape validation, not a header allowlist. Depth 1999-09-15 →
+present (1,051 rows on probe day); unsorted; zero exact duplicates; contains **self-rename
+artifact rows** (old==new, published alongside real renames — the builder drops them) and 139
+chain intermediates (multi-step renames). `applicable_from` empirically equals the first
+trading day under the new symbol (verified against vault boundaries for
+ADANITRANS→ADANIENSOL 2023-08-24, MCDOWELL-N→UNITDSPR 2024-06-07, ZOMATO→ETERNAL 2025-04-09).
+Steady-state: observations win, so the UDiFF era self-heals from bhavcopy alone even with a
+stale file (fallback boundary + warning); re-fetch rides the P0-17 nightly list — no
+recurring operator task.
 `sec_bhavdata_full_{DDMMYYYY}.csv` (delivery quantities) noted as a P0-13 candidate; not
 probed (request budget).
 
