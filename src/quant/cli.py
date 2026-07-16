@@ -17,7 +17,7 @@ import typer
 from quant import __version__
 from quant.config import Settings, source_spec
 from quant.errors import ConfigError, PlatformError
-from quant.ingest import RawStore, bhavcopy, symbolchange
+from quant.ingest import RawStore, bhavcopy, corp_actions, symbolchange
 
 app = typer.Typer(name="platform")
 
@@ -62,10 +62,12 @@ def ingest(
             summary = _ingest_bhavcopy(date, since, until, weekends)
         elif source == symbolchange.SOURCE:
             summary = _ingest_symbolchange(date, since, until, weekends)
+        elif source == corp_actions.SOURCE:
+            summary = _ingest_corp_actions(date, since, until, weekends)
         else:
             raise ConfigError(
                 f"no adapter for source {source!r}; available: "
-                f"{[bhavcopy.SOURCE, symbolchange.SOURCE]}"
+                f"{[bhavcopy.SOURCE, symbolchange.SOURCE, corp_actions.SOURCE]}"
             )
     except PlatformError as exc:
         typer.echo(f"error: {exc}", err=True)
@@ -76,6 +78,11 @@ def ingest(
         typer.echo(
             f"{summary.source} {summary.since}..{summary.until}: "
             f"stored={summary.stored} noop={summary.noop} holiday={summary.holiday}"
+        )
+    elif isinstance(summary, corp_actions.IngestSummary):
+        typer.echo(
+            f"{summary.source} {summary.since}..{summary.until}: "
+            f"{'stored' if summary.stored else 'noop'} sha256={summary.sha256[:12]}"
         )
     else:
         typer.echo(
@@ -120,4 +127,28 @@ def _ingest_symbolchange(
         artifact, created = symbolchange.fetch_snapshot(d, store=store, spec=spec, client=client)
     return symbolchange.SnapshotSummary(
         symbolchange.SOURCE, str(artifact.logical_date), created, artifact.sha256
+    )
+
+
+def _ingest_corp_actions(
+    date: str | None, since: str | None, until: str | None, weekends: bool
+) -> corp_actions.IngestSummary:
+    """Windowed source: --since is required (window start); --until defaults to today."""
+    if date is not None or weekends:
+        raise ConfigError(
+            f"{corp_actions.SOURCE} is a windowed source: use --since (required) and optional"
+            " --until; --date and --include-weekends do not apply"
+        )
+    if since is None:
+        raise ConfigError(f"{corp_actions.SOURCE} requires --since (window start)")
+    first = _parse_iso(since, "--since")
+    last = _parse_iso(until, "--until") if until is not None else datetime.date.today()
+    spec = source_spec(corp_actions.SOURCE)
+    store = RawStore(Settings())
+    with _make_client() as client:
+        artifact, created = corp_actions.fetch_window(
+            first, last, store=store, spec=spec, client=client
+        )
+    return corp_actions.IngestSummary(
+        corp_actions.SOURCE, str(first), str(last), created, artifact.sha256
     )

@@ -11,10 +11,19 @@ factor(action): split num:den → den/num ; bonus b:a → a/(a+b) ; rights → t
 adj_factor(isin, d) = ∏ factor(a) for a.ex_date > d          # =1 for latest dates
 adjusted_close(d) = raw_close(d) · adj_factor(isin, d)
 ```
-Same-day multiple actions: multiply factors (order-independent). Demerger: no reliable
-formula from ratios alone → `needs_review`; block curation of that ISIN; operator enters
-resolved factor from exchange circular (RB-4). Invariant (property test): daily returns
-computed from adjusted prices are identical whether adjustment is applied today or after
+Column conventions the adjuster consumes (pinned by ADR-023, set in curate/corp_actions.py) —
+so a factor is never inverted: **split** `ratio_num`=old (pre) face value, `ratio_den`=new
+(post) → factor `ratio_den/ratio_num` (covers face-value sub-divisions AND consolidations/
+reverse splits); **bonus** `ratio_num`=X new bonus shares, `ratio_den`=Y per Y held → factor
+`ratio_den/(ratio_num+ratio_den)`. Same-day multiple actions: multiply factors
+(order-independent). **Rights** arrive as `needs_review`, never auto (P0-10 finding): the NSE feed's
+faceVal is anachronistic — the current value, not the value at ex_date (251/263 splits confirm it
+equals the POST-split face value) — so the issue price S = faceVal + premium cannot be
+reconstructed, and P_cum is unknown at ingest; the operator enters the factor from the circular.
+**Demerger** (and the `other` bucket — capital reductions, compound schemes, unclassifiable
+reorganizations, ADR-023): no reliable formula → `needs_review`; block curation of that ISIN;
+operator enters resolved factor from exchange circular (RB-4). Invariant (property test): daily
+returns computed from adjusted prices are identical whether adjustment is applied today or after
 appending future data.
 
 ## §2 PIT as-of semantics (leakage-proof by construction)
@@ -38,7 +47,8 @@ byte-identical.
 candidates = symbols with a price row on d resolving to an ISIN, exchange=NSE, series=='EQ'
 exclude if: price<₹20 | age<180 td | ff_mcap<floor (proxy: rank by MDTV until
   fundamentals mature — flagged) | surveillance in {GSM*, ASM stage≥2} |
-  zero_days_pct>5% | pending demerger review
+  zero_days_pct>5% | pending CA review (any corporate_actions row status=needs_review —
+    demerger/rights/other — for the ISIN; generalized from "pending demerger" by ADR-023)
 investable(book) = position_value(book) ≤ p_max · MDTV      # evaluated at query time
 ```
 Candidates line amended by ADR-022 (was "listings active on d"): listing answers identity
@@ -59,7 +69,8 @@ keep   = {h ∈ holdings : rank(h) ≤ buffer·N and not hard_excluded(h)}
 adds   = top-ranked non-held names filling to N (skip if !investable)
 reasons: entry|hold_buffer|exit_rank|exit_hard(<which>)|skip_liquidity
 ```
-Hard exclusions (surveillance/delisting/liquidity/demerger) override the buffer, always.
+Hard exclusions (surveillance/delisting/liquidity/pending-CA-review — any needs_review
+corporate action, ADR-023) override the buffer, always.
 
 ## §7 Weights, drift bands, governor, tax overlay (applied in this order)
 **Capped inverse-vol (iterative water-filling):**

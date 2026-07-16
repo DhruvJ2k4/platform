@@ -26,3 +26,18 @@ bhavcopy:
     Accept: "*/*"
     Accept-Language: "en-US,en;q=0.9"
     Referer: "https://www.nseindia.com/"
+corp_actions:
+  # NSE corporate-actions JSON API (P0-10 probe 2026-07-15). Contrary to doc 09 P0-05's
+  # "browser-grade client needed" verdict, the www API is COOKIE-gated, not TLS-gated: a GET to
+  # prime_url returns 403 but sets the Akamai cookie, after which this API returns 200 to a plain
+  # client (httpx carries the cookie in-jar). Windowed by {from_date}/{to_date} (DD-MM-YYYY); the
+  # API does not cap the span (5y in one call, probed). caBroadcastDate is null in this feed.
+  url_template: "https://www.nseindia.com/api/corporates-corporateActions?index=equities&from_date={from_date}&to_date={to_date}"
+  prime_url: "https://www.nseindia.com/"
+  delay_seconds: 3.5
+  timeout_seconds: 30
+  headers:
+    User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+    Accept: "application/json, text/plain, */*"
+    Accept-Language: "en-US,en;q=0.9"
+    Referer: "https://www.nseindia.com/companies-listing/corporate-filings-actions"

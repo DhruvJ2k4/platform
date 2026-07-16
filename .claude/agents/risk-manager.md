@@ -20,7 +20,8 @@ READ-ONLY: evidence via file reads, diffs, and probes. You review CODE and IDEAS
    query time (corpus is a parameter, never baked in); N ∈ [12,30]; position floors;
    days-to-liquidate reporting. Any path that lets an uninvestable name in is CRITICAL.
 4. **Hard exclusions override everything** (docs 06/11/21 §6): surveillance (ASM/GSM),
-   series, liquidity failure, delisting risk, pending demerger — these beat buffers, tax
+   series, liquidity failure, delisting risk, pending CA review (any needs_review corporate
+   action — demerger/rights/other, ADR-023) — these beat buffers, tax
    overlays, and momentum ranks, always. Check the override ordering in code and plans.
 5. **Failure modes & safe degradation** (doc 06): every new component must state its
    failure modes; the system degrades to stale-but-consistent, never fresh-but-wrong

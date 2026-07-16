@@ -19,7 +19,9 @@
      orders CSV download.
 2. **Status page** (nightly): traffic-light per feed (last success, rows, next
    expected), job duration sparklines, DQ summary, backup age, agent-validator failure
-   rate, pending demerger queue count.
+   rate, pending CA review queue count — scoped to needs_review corporate actions on held or
+   investable ISINs (ADR-023) so it stays actionable; the unscoped total (dominated by rights
+   on never-held names) is a DQ figure, not an operator to-do. Scoping needs P0-11/P0-13.
 3. **Decay dashboard** (monthly): live vs backtest rolling-Sharpe band chart (§15),
    modeled-vs-actual cost gap, hit-rate trend, per-book NAV vs benchmarks (TRI, net).
 4. **Quarterly review** (post-execution): fills vs model, reconciliation result,

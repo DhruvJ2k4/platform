@@ -26,8 +26,12 @@ at fiscal-year end · overlays (deferral, harvesting) as engine switches.
 
 ## Corporate actions in backtests
 Prices pre-adjusted in curated (splits/bonuses); cash dividends credited on ex-date from
-CA table; demergers: resolved entries only (pending ⇒ name uninvestable historically for
-the unresolved window — conservative).
+CA table (cash_amount is credited ONLY for kind=dividend — a rights row's cash_amount is the
+subscription premium, not a credit, ADR-023); any needs_review CA (demerger/rights/other):
+resolved entries only (pending ⇒ name uninvestable historically for the unresolved window —
+conservative). Note (P0-10 → P0-11): the CA feed's covered window may be shorter than price
+history; the adjuster must treat price dates before the CA coverage floor (min covered ex_date)
+as under-covered — NaN/exclude, never a partially-adjusted price.
 
 ## Benchmarks
 Nifty 50 TRI and Nifty Midcap 150 TRI (official values via TRI ingest), each net of

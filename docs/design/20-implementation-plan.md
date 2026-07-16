@@ -36,7 +36,7 @@ platform/
 | P0-08 | Trading calendar from bhavcopy presence | Muhurat + holidays correct for 3 sample years | 2h |
 | P0-09 | Security master + effective-dated listing resolver (symbol changes file) | Known rename resolves correctly across boundary (test) | 8h |
 | P0-10 | Corporate-actions ingester | 5y CA table populated; kinds classified; demergers → `needs_review` | 6h |
-| P0-11 | **CA adjuster** (algorithm 21§1) + golden + property tests | Golden to the paisa; invariance property green; demerger blocks | 14h |
+| P0-11 | **CA adjuster** (algorithm 21§1) + golden + property tests + **atomic publish of curated tables** (doc 06 §6.2; persists the validated frames returned by P0-08/09/10) | Golden to the paisa; invariance property green; demerger blocks; calendar/master/CA/prices published atomically | 14h |
 | P0-12 | Dividend cash table | Ex-date credits match CA source for sample | 2h |
 | P0-13 | Liquidity stats + PIT universe builder (21§3–4) | `universe --date` <1s with exclusion reasons; monotonicity green | 8h |
 | P0-14 | ASM/GSM surveillance ingester + hard-exclusion wiring | List-add flips investability next build (test) | 3h |

@@ -1,4 +1,5 @@
--- corporate_actions (doc 10). kind: split|bonus|dividend|demerger|rights|buyback;
+-- corporate_actions (doc 10). kind: split|bonus|dividend|demerger|rights|buyback|other;
+-- (other = review bucket for reorganizations with no reliable auto formula, ADR-023).
 -- status: auto|needs_review|resolved. PIT: rows visible only where available_at <= asof.
 CREATE TABLE corporate_actions (
     isin TEXT NOT NULL,

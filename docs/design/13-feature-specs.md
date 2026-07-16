@@ -10,8 +10,10 @@ rejected by checksum.
 ## F2 Corporate-actions adjustment (P0 — highest-risk component)
 In: CA table + unadjusted prices. Out: `prices_adj` with adj_factor chain. Logic: reverse
 cumulative factors from ex-dates; dividends NOT price-adjusted (credited as cash in
-ledger); demergers → review queue (block + flag). Edge: same-day multiple actions;
-actions on suspended names; rights issues (factor from terms); bonus on partly-paid
+ledger); any needs_review CA (demerger/rights/other) → review queue (block + flag; ADR-023).
+Edge: same-day multiple actions; actions on suspended names; rights issues → review queue
+(operator enters factor from circular; auto-from-terms falsified — the feed's faceVal is
+anachronistic so issue price S is unrecoverable, ADR-023); bonus on partly-paid/preference
 (queue). Accept: golden scenario; adjustment-timing invariance property; two-part validation per doc 21 §14 / ADR-019 (CA spot-checks ≤25bps; EW-proxy corr ≥ 0.995, no unexplained >5% days); ITC-Hotels-class demerger lands in
 queue, not in data.
 

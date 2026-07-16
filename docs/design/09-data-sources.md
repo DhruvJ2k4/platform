@@ -4,7 +4,7 @@
 | Source | Role | Quality | Cost | PIT | History | API/access | Licensing | Maint. | Verdict |
 |---|---|---|---|---|---|---|---|---|---|
 | NSE bhavcopy (+archives) | Prices/volumes/series incl. delisted | High (official) | Free | Yes by nature | ~20y | File downloads; epochs | Public data | Med (epochs) | **Core** |
-| NSE corporate actions | Adjustments, dividends | High | Free | Yes | Long | File/portal | Public | Med (demergers manual) | **Core** |
+| NSE corporate actions | Adjustments, dividends | High | Free | Conservative (available_at=ex_date; no broadcast ts) | ≥5y probed (uncapped in that fetch; deeper history unverified) | www JSON API, cookie-primed (P0-10) | Public | Med (free-text subjects; demergers/rights/other manual) | **Core (P0-10)** |
 | NSE symbol-change file | Security-master rename boundaries + pre-observation chains | High (official) | Free | Snapshot (identity facts, not signals — ADR-022) | 1999→ | Single CSV, tolerant host | Public | Low | **Core (P0-09)** |
 | NSE filings/announcements (XBRL/CSV) | PIT fundamentals + event layer | High | Free | **Yes (broadcast ts)** | Fwd + partial archive | Portal; bot-sensitive | Public regulatory | Med-high (weakest link; absence-alarms) | **Core (P1 collect-early)** |
 | ASM/GSM surveillance lists | Hard exclusions | High | Free | Yes (daily) | Fwd | File | Public | Low | **Core** |
@@ -70,6 +70,26 @@ stale file (fallback boundary + warning); re-fetch rides the P0-17 nightly list 
 recurring operator task.
 `sec_bhavdata_full_{DDMMYYYY}.csv` (delivery quantities) noted as a P0-13 candidate; not
 probed (request budget).
+
+**Corporate-actions feed (P0-10 probe, 2026-07-15; ≤7 residential requests):** no bulk CA file
+exists on the tolerant `nsearchives` host (4 candidate paths → 404). The source is the `www` JSON
+API `https://www.nseindia.com/api/corporates-corporateActions?index=equities&from_date={DD-MM-YYYY}&to_date={DD-MM-YYYY}`.
+**Corrects the P0-05 verdict for THIS endpoint:** the www API is COOKIE-gated, not TLS-gated — a
+GET to the homepage returns 403 but sets the Akamai bootstrap cookie, after which the API returns
+200 to a plain httpx/curl client (no browser-grade impersonation needed; the P0-21 filings
+collector's need is unchanged, being a different surface). The window is uncapped — a single call
+returned all of 2021-07→2026-07 (12,182 rows, 3.7 MB). Format is a bare JSON array; each object
+carries isin, symbol, series, exDate (DD-MMM-YYYY), the free-text `subject` (purpose), faceVal,
+recDate. **Two load-bearing findings:** (1) `caBroadcastDate` is null for every row — this feed
+has NO announcement timestamp, so PIT `available_at` is set conservatively to ex_date (00:00),
+look-ahead-safe and refined later by P0-21's broadcast-timestamp mining; (2) `faceVal` is
+anachronistic — the CURRENT face value, not the value at ex_date (equals the POST-split value in
+251/263 splits; 0 ISINs show >1 faceVal), so split ratios are parsed from the `subject` text and
+rights issue price cannot be reconstructed (→ rights are needs_review, ADR-023). Subjects are
+human-entered and typo-ridden; classification is conservative — ambiguity → needs_review, never a
+crash; only structural JSON drift (non-list body, missing consumed key) is a ParseError. Series
+GS/IV/RR (govt secs, InvIT/REIT, RR) are non-equity instruments, excluded from the equity CA
+table. Steady-state re-pull rides the P0-17 nightly window.
 
 **Announcements archive depth (operator browser check, 2026-07-13):** not measurable from a
 plain HTTP client (see client-shape gate), but the portal UI returns announcement rows with

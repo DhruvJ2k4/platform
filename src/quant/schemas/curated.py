@@ -63,12 +63,19 @@ class PricesAdj(Contract):
 
 
 class CorporateActions(Contract):
-    """corporate_actions: PIT-lagged facts; demergers arrive as needs_review, never auto."""
+    """corporate_actions: PIT-lagged facts; demergers arrive as needs_review, never auto.
+
+    kind='other' (ADR-023) is the review bucket for reorganizations with no reliable auto
+    formula (capital reductions, unclassifiable non-meeting subjects) — always needs_review,
+    alongside demergers and rights. Column conventions per kind live in curate/corp_actions.py.
+    """
 
     isin: pd.ArrowDtype = field(STR, nullable=False)
     ex_date: pd.ArrowDtype = field(DATE, nullable=False)
     kind: pd.ArrowDtype = field(
-        STR, nullable=False, isin=["split", "bonus", "dividend", "demerger", "rights", "buyback"]
+        STR,
+        nullable=False,
+        isin=["split", "bonus", "dividend", "demerger", "rights", "buyback", "other"],
     )
     ratio_num: pd.ArrowDtype = field(I32, nullable=True)
     ratio_den: pd.ArrowDtype = field(I32, nullable=True)

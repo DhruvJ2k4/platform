@@ -6,7 +6,9 @@ files committed per epoch).
 **Property (hypothesis):** ledger conservation (cash+positions+costs+taxes ≡ initial+P&L)
 · adjusted-return invariance to adjustment timing · NAV continuity off cashflow days ·
 PIT no-future-rows (shift asof, assert unreachable) · curation determinism (rebuild
-twice, byte-compare) · FIFO ordering invariants.
+twice, byte-compare) · FIFO ordering invariants · CA classifier totality + conservation
+(classify never raises on arbitrary text; every parsed action is kept or dropped for exactly
+one reason; review-bucket kinds — demerger/rights/other — are always needs_review; P0-10).
 **Golden:** hand-computed 3-stock/8-quarter scenario with split, bonus, dividend,
 delisting, LTCG/STCG boundary, exemption — reproduced to the paisa on every change.
 **Oracle:** costless momentum config vs. vectorbt within float tolerance (guards the

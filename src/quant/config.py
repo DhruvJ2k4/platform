@@ -139,6 +139,9 @@ class SourceSpec(BaseModel):
     # Era-aware backfill: dates <= classic_until fetch from classic_url_template instead.
     classic_url_template: str | None = None
     classic_until: date | None = None
+    # Cookie-prime GET before the real request (P0-10): the NSE www API is cookie-gated, so the
+    # adapter fetches prime_url first (its 403 still sets the Akamai cookie) to unlock the API.
+    prime_url: str | None = None
 
 
 def load_sources(settings: Settings | None = None) -> dict[str, SourceSpec]:

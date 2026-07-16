@@ -20,7 +20,8 @@ fitted later must be walk-forward estimated.
 Buffered membership (turnover suppression is structural) → capped inverse-vol weights
 (8% name / 25% sector, AMFI map) → dynamic N (ADR-014) → cash residual → drift-band
 trades intra-quarter (>25% relative drift only) → hard exclusions override everything
-(surveillance, series, liquidity failure, delisting risk, pending demerger).
+(surveillance, series, liquidity failure, delisting risk, pending CA review — any needs_review
+corporate action: demerger/rights/other, ADR-023).
 
 ## Risk framework
 Drawdown budget per book (default 25%) with pre-committed governor: at 0.8× budget new-

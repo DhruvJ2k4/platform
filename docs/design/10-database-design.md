@@ -20,9 +20,11 @@ CREATE TABLE prices_adj (isin TEXT, d DATE, exchange TEXT, series TEXT,
   close_unadj DECIMAL(12,2), volume BIGINT, traded_value DECIMAL(18,2),
   adj_factor DOUBLE, band_hit TEXT,                                             -- upper|lower|null
   PRIMARY KEY (isin, d));
-CREATE TABLE corporate_actions (isin TEXT, ex_date DATE, kind TEXT,             -- split|bonus|dividend|demerger|rights|buyback
-  ratio_num INT, ratio_den INT, cash_amount DECIMAL(12,2), status TEXT,         -- auto|needs_review|resolved
-  source_ref TEXT, available_at TIMESTAMP);
+CREATE TABLE corporate_actions (isin TEXT, ex_date DATE, kind TEXT,             -- split|bonus|dividend|demerger|rights|buyback|other
+  ratio_num INT, ratio_den INT, cash_amount DECIMAL(12,2), status TEXT,         -- auto|needs_review|resolved; other=review bucket (ADR-023)
+  source_ref TEXT, available_at TIMESTAMP);                                     -- P0-10 conventions: split num/den=old/new face value; bonus num/den=X:Y;
+                                                                                -- rights num/den + cash=premium (always needs_review); dividend cash=Σ per-share;
+                                                                                -- available_at=ex_date (feed has no broadcast ts; P0-21 refines) — curate/corp_actions.py
 CREATE TABLE universe_membership (isin TEXT, d DATE, investable BOOL,
   mdtv DECIMAL(18,2), amihud DOUBLE, zero_days_pct DOUBLE, surveillance TEXT,
   excl_reasons TEXT[]);                                                         -- PIT universe: the only allowed universe source

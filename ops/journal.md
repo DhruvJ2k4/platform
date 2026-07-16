@@ -181,3 +181,72 @@
   AARVEEDEN all hit variants of this). Full-vault core build now green: 6,839 securities /
   10,842 listings; splice DQ 431 pass, 0 fail, 613 incomparable (sparse gaps); 344
   synthetic eras; 230 chain stops; 586 recycle clips.
+
+## 2026-07-16 — P0-10
+- CA source resolved by live probe (the P0-05 spike never covered it): no bulk file on the
+  tolerant nsearchives host (4 paths → 404); the source is the www JSON API
+  `corporates-corporateActions?index=equities&from_date&to_date`. Doc-vs-reality: doc 09 P0-05
+  said the www API needs a browser-grade client (P0-21) — FALSE for this endpoint. It is
+  COOKIE-gated: the homepage 403 still sets the Akamai cookie, then the API returns 200 to a
+  plain httpx client. Adapter cookie-primes (SourceSpec.prime_url; the 403 prime is tolerated,
+  not gated). Window is uncapped — one call returned 2021-07→2026-07 (12,182 rows, 3.7 MB). Doc
+  09 amended; P0-21's separate browser-grade need is unchanged.
+- Two probe findings reshaped the design (both would have been silent money bugs): (1)
+  caBroadcastDate is null for ALL rows — no announcement timestamp in this feed → available_at
+  set conservatively to ex_date (look-ahead-safe; P0-21 refines). (2) faceVal is anachronistic
+  — the CURRENT face value, = the POST-split value in 251/263 splits, 0 ISINs with >1 faceVal —
+  so split ratios are parsed from the subject text (never faceVal) and rights issue price S is
+  unrecoverable → rights are ALWAYS needs_review (ADR-023), not auto.
+- Classifier is a conservative rules engine over human-entered free-text subjects (typos:
+  divdend, inteirm, "Bonus- 1:2", "Rights Issue 4:17"). Content ambiguity → needs_review, never
+  a crash; only structural JSON drift (non-list body / missing consumed key) is a ParseError;
+  nothing price-affecting is silently dropped (fallthrough = other/needs_review). Pinned column
+  conventions (doc 21 §1): split num/den=old/new face value → factor den/num (covers
+  consolidations); bonus num/den=X:Y → factor den/(num+den); dividend cash=Σ per-share
+  (compounds summed); amount-less dividend → needs_review, never 0.
+- Desk/Ultraplan corrections folded in before code: kind=demerger-for-everything was a semantic
+  lie → additive kind='other' (ADR-023; pandera + doc-10 comment, no DDL — SQL has no CHECK),
+  with doc 21 §4/§6 hard-exclusion generalized "pending demerger" → "any needs_review CA";
+  EQ-only filter replaced by a non-equity-instrument EXCLUDE-list (GS/IV/RR) so a real equity CA
+  tagged non-EQ is never dropped (CAs are ISIN-level facts); preference-share bonus ("Bonus
+  Ncrps") routed to needs_review (a false equity dilution otherwise); multi-action subjects (2
+  in 5y, both scheme+bonus) → other/needs_review via precedence, not a silent second-action drop.
+- DoD interpretation (P0-08/P0-09 precedent): "5y CA table populated" = builder returns a
+  validated corporate_actions frame; persistence lands with P0-11's atomic publish.
+- Live 5y build: 12,179 parsed (3 exact dupes collapsed) → 8,205 CA rows; per-kind
+  split 264 / bonus 264 / dividend 7,270 / rights 195 / buyback 148 / demerger 58 / other 6;
+  auto 7,930, needs_review 275 (all demerger+rights+other + amount-less dividends + preference
+  bonus); 818 non-equity dropped, 3,156 meetings dropped; conservation balances.
+- Carried: per-component dividend rows if P0-12 needs them (currently summed); broadcast-ts
+  available_at refinement → P0-21; nightly incremental window → P0-17.
+- Desk+engineering review (9 agents, all launched successfully this time — no spend-limit fallback):
+  contract-auditor PASS; arch-purity 1 NOTE (parser sort key made total-order — fixed).
+  Money-critical finds converged across money-auditor/execution-trader/risk-manager/quant-researcher
+  and were fixed in-pass: (a) zero/sub-rupee ratios were classified auto → factor 0 or ÷0 in the
+  adjuster; now any non-positive or non-integer face-value ratio → needs_review (_positive gate,
+  _FV_RE widened to see decimals). (b) _dividend_total summed EVERY rupee token → face-value/interest
+  figures inflated cash and an amount-less "on face value Rs 10" fabricated a credit; now non-dividend
+  monetary clauses are masked before summing (compounds still add up) and a 0/absent total →
+  needs_review. (c) dividend branch now applies the non-equity-instrument guard (preference/cumulative
+  dividends → needs_review), matching split/bonus. (d) builder classifies BEFORE the isin/ex_date
+  gate so a real action can't vanish silently for missing identity/date — such drops now warn with
+  kind+status (hard-exclusion integrity). (e) unexpected series tags are kept-but-alarmed.
+  Impact on the live build: auto 7930→7929, needs_review 275→276 (one ambiguous "Interest Dividend"
+  → review); all other counts unchanged. New tests lock every fix + a numeric factor-convention anchor.
+- WARN justified (not fixed — fixing would fabricate): available_at=ex_date makes a needs_review
+  CA's hard-exclusion first visible on ex_date, not during the pre-ex announce window. The feed has
+  no announcement date (caBroadcastDate null) and record/book-closure dates are LATER than ex_date;
+  setting an earlier available_at would be a guessed fact and could itself leak. ex_date is the
+  evidence-based floor for both the price path (look-ahead-safe; quant-researcher PASS) and the
+  exclusion; the pre-ex exclusion refinement needs P0-21's broadcast-timestamp mining. Carried to
+  P0-21; P0-11/P0-13 must not read "no visible CA before ex-date" as "safe to trade into".
+- Carried to P0-11: CA feed coverage window may be shorter than price history → the adjuster must
+  NaN/exclude price dates before the CA coverage floor (min covered ex_date), never partially adjust
+  (quant-researcher missing-past bias). For production the operator ingests the full price-history
+  window, not just the DoD's 5y (the API is uncapped). doc 09 "history" corrected to "≥5y probed"
+  (only 5y was actually fetched). Bitemporal gap noted: an NSE revision of a historical CA rewrites
+  adjusted history while available_at still reads ex_date — relies on raw immutability + supersession
+  rows to detect drift (acceptable; CA records rarely revised).
+- Persistence deferral fixed at the root: P0-11's doc-20 DoD amended to explicitly own the atomic
+  publish of the curated tables returned by P0-08/09/10 (was stranded — P0-11's DoD named only the
+  adjuster). doc 24 review-queue count scoped to held/investable ISINs so it stays actionable.
