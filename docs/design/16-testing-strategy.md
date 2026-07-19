@@ -11,6 +11,10 @@ twice, byte-compare) · FIFO ordering invariants · CA classifier totality + con
 one reason; review-bucket kinds — demerger/rights/other — are always needs_review; P0-10).
 **Golden:** hand-computed 3-stock/8-quarter scenario with split, bonus, dividend,
 delisting, LTCG/STCG boundary, exemption — reproduced to the paisa on every change.
+The adjustment slice lives in tests/golden/golden_scenario.py (P0-11: ALPHA factor chain
+incl. same-day pair, BRAVO pending→resolved demerger, CHARLIE delisting); P1-03 extends the
+SAME scenario module with tax lots. The doc 21 §1 invariance property is exact on the
+close_unadj × adj_factor path; quantized closes are pinned to exact HALF_UP rounding (ADR-024).
 **Oracle:** costless momentum config vs. vectorbt within float tolerance (guards the
 replay driver, then our cost model is the only divergence source).
 **Integration:** fixture-raw → full pipeline → known curated checksums; F1–F8 acceptance

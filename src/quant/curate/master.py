@@ -7,7 +7,7 @@ pre-observation symbol chains; the oldest era of every chain has valid_from NULL
 Listing answers IDENTITY only — never existence, age, or activity. Unrepairable identity
 conflicts raise ContractViolation; a resolution miss returns None (miss beats guess). The
 build is a pure deterministic function of its input frames; builders return validated frames
-(persistence lands with P0-11's atomic publish).
+that curate/build.py publishes atomically (ADR-024).
 """
 
 from dataclasses import dataclass

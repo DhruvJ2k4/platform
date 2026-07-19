@@ -21,10 +21,20 @@ faceVal is anachronistic — the current value, not the value at ex_date (251/26
 equals the POST-split face value) — so the issue price S = faceVal + premium cannot be
 reconstructed, and P_cum is unknown at ingest; the operator enters the factor from the circular.
 **Demerger** (and the `other` bucket — capital reductions, compound schemes, unclassifiable
-reorganizations, ADR-023): no reliable formula → `needs_review`; block curation of that ISIN;
-operator enters resolved factor from exchange circular (RB-4). Invariant (property test): daily
-returns computed from adjusted prices are identical whether adjustment is applied today or after
-appending future data.
+reorganizations, ADR-023): no reliable formula → `needs_review`; blocks the ISIN's PRE-EX window
+(prices with d < the pending ex_date are withheld; post-ex rows are provably unaffected —
+ADR-024); operator enters the resolved factor from the exchange circular (RB-4) into
+config/ca-resolutions.yaml — ratio columns keep the row kind's semantics (resolved
+rights/demerger/other → factor `ratio_den/ratio_num`; resolved bonus → `den/(num+den)`).
+**Coverage bounds (ADR-024):** price dates outside [min CA ex_date observed, CA fetch-window
+end] are excluded, never partially adjusted — a missing forward action would silently mis-scale
+every earlier price. **Factors are exact rationals** (Fraction products); adjusted o/h/l/c =
+quantize(raw × F, paisa, HALF_UP); adj_factor stores the float.
+Invariant (property test, restated by ADR-024 — hypothesis falsified the naive form): daily
+returns computed from `close_unadj × adj_factor` are EXACTLY identical whether adjustment is
+applied today or after appending future data; the paisa-quantized closes obey it within
+deterministic half-paisa rounding (each published close is exactly the HALF_UP quantization of
+the exact value). Features needing exact long-horizon returns consume the factor path.
 
 ## §2 PIT as-of semantics (leakage-proof by construction)
 Every curated fact row carries `available_at`. All reads go through:

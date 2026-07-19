@@ -1,0 +1,24 @@
+# Operator-entered corporate-action resolutions (RB-4 runbook; ADR-024; doc 21 §1).
+#
+# Each entry resolves exactly one needs_review corporate_actions row, keyed by
+# (isin, ex_date, kind). The ratio columns keep the ROW KIND's semantics (uniform whether a
+# row is auto or resolved — the adjuster has one rule per kind, doc 21 §1):
+#
+#   split / rights / demerger / other:  factor = ratio_den / ratio_num
+#   bonus (X:Y terms, X new per Y held): factor = ratio_den / (ratio_num + ratio_den)
+#
+# e.g. a demerger where the remaining entity keeps 70% of pre-ex value:
+#   - isin: INE000A00000
+#     ex_date: 2025-01-30
+#     kind: demerger
+#     ratio_num: 10
+#     ratio_den: 7
+#     source_ref: "NSE circular NSE/CML/2025/xx — scheme of arrangement ratio"
+#
+# Rules (enforced by the curation build):
+# - the (isin, ex_date, kind) key MUST match an existing needs_review row — an unmatched
+#   resolution is a ConfigError (loud), never silently ignored;
+# - ratio_num/ratio_den are strictly positive integers; source_ref (the circular) is mandatory;
+# - resolutions live HERE (config@git) because curated is a deterministic function of
+#   (raw, code, config) — doc 08; an operational-DB row would be wiped by every rebuild.
+resolutions: []

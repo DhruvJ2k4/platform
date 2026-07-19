@@ -250,3 +250,71 @@
 - Persistence deferral fixed at the root: P0-11's doc-20 DoD amended to explicitly own the atomic
   publish of the curated tables returned by P0-08/09/10 (was stranded — P0-11's DoD named only the
   adjuster). doc 24 review-queue count scoped to held/investable ISINs so it stays actionable.
+
+## 2026-07-18 — P0-11
+- CA adjuster + curation pipeline + atomic publish landed (curate/{adjust,prices,build,publish}.py;
+  `platform curate --rebuild --asof`). Factors are exact Fractions; adjusted o/h/l/c paisa-quantized
+  HALF_UP; adj_factor stores the float; volume/traded_value/close_unadj raw. Vault parsed ONCE and
+  shared (master alone had re-parsed 758 files; rebuild now ~3.5min end-to-end).
+- Doc-vs-reality event (found by hypothesis, not by me): doc 21 §1's invariant "returns identical
+  whether adjustment is applied today or later" is UNACHIEVABLE bit-exact on paisa-quantized closes
+  — independent half-paisa roundings perturb ratios (100/3→33.33, 101/3→33.67: ratio ≠ 101/100;
+  falsified by a single appended split 3:1). Resolution (ADR-024, doc 21 amended): invariance is
+  EXACT on close_unadj × adj_factor (property-tested with exact rationals); each published close is
+  pinned to be exactly the HALF_UP quantization of the exact value (second property); features
+  needing exact long-horizon returns consume the factor path (P1-05 note). Never weakened — the
+  naive equality test was replaced by two STRONGER exact statements.
+- Golden fixture-date typo caught by the golden run: the draft demerger ex-date (2025-01-20) sat
+  AFTER Q5 (2025-01-15) though the hand-computation said "between Q4 and Q5" and blocked Q1..Q4.
+  Fixture date corrected to 2024-12-20 to match the documented intent; expected VALUES untouched
+  (justification recorded in golden_scenario.py — this is a fixture correction, not a
+  golden-value update).
+- Operator-approved fork: "blocked ISIN" = PRE-EX WINDOW withholding (doc 12's "unresolved window"
+  reading), not whole-ISIN (doc 06 letter amended via ADR-024) — whole-ISIN would have stripped
+  ~250 ISINs' provably-correct post-ex history (195 pending rights alone). Live build: 52,534 rows
+  blocked across 196 ISINs; RELIANCE's own pending Jio Financial demerger (ex 2023-07-20) demos it.
+- Resolutions live in config/ca-resolutions.yaml (curated = f(raw, code, config), doc 08 — a DB row
+  would be wiped by rebuild; muhurat-config precedent). Ratio columns keep the ROW KIND's semantics
+  (resolved bonus stays den/(num+den)); unmatched/ambiguous resolution = ConfigError.
+- Series census (probe): 162 distinct series in the vault → equity INCLUDE-list (EQ>BE>BZ>SM>ST>SZ)
+  with priority collapse; auxiliaries (BL/T0/BO/IL) always coexist with exactly one main series
+  (1,381 multi-series (isin,day) rows, zero two-main conflicts); duplicate same-series rows =
+  ContractViolation. 186 unresolvable classic-11 rows excluded (miss beats guess).
+- Live rebuild (asof 2026-07-15): run_id curate-20260715-2fa3ae29; security 6,839 / listing 10,842 /
+  calendar 758 / CA 8,205 / prices_adj 1,939,557; coverage_excluded 10,256 (pre-2021-07-15 sample
+  days — floor enforced as carried from P0-10); conservation exact. RELIANCE across its 2024-10-28
+  bonus: pre-ex adjusted = raw × 1/2 to the paisa. Same-day bonus(1:2)+split(2→1) on INE012Q01021:
+  factor exactly 1/3 (61.30 → 20.43); its vault rows END the day before ex — the name stopped
+  trading at the boundary (raw truth, verified, not a defect). SECOND FULL REBUILD: same run_id,
+  "no-op (identical)" — determinism + idempotency proven on the real vault.
+- Deferrals recorded: curate --incremental (rebuild is the correctness path; nightly era);
+  band_hit stays NULL (bhavcopy carries no band columns); publish gate v0 = schema + PK + coverage
+  + conservation (P0-16 extends); old-version GC is ops housekeeping (immutable versions kept).
+- Review ran INLINE (all 9 agent launches died: org monthly spend limit + ECONNRESET —
+  P0-07/08/09/10 precedent). Each .claude/agents mandate adopted seat-by-seat, evidence-first:
+  arch (lint-imports KEPT ×2; engine untouched; no .df(); no wall-clock in build paths — CLI
+  --asof default today is an argument boundary; subprocess git in _code_ref is curate-layer-legal,
+  falls back to version) PASS. test (288 green re-run; unique basenames; no network; DoD→named
+  tests; golden fixture-date correction justified in-module; invariance reframe is a strengthening)
+  1 NOTE fixed: _verify_identical determinism-breach path was untested → integration test added.
+  money (hand-recompute 2655.70×1/2=1327.85 ✓; scale() 28-digit-division tie-safety PROBED —
+  ties only at terminating quotients, which are exact in-range → argument recorded at the code
+  site) 1 NOTE fixed. contract (no schema changes; PricesAdj strict validation at build + door +
+  read; DECIMAL survives the hive round-trip — integration-asserted; resolutions-mutated rows
+  revalidate) PASS. docs (ADR-024 append-only; 21/06/10/16 propagated; sweep clean) 1 WARN fixed:
+  doc 17 RB-4 still said "enter resolved CA row" — an operator would hunt for a DB row; rewritten
+  to name config/ca-resolutions.yaml + per-kind ratio semantics. quant-researcher (resolutions
+  PIT argument: the resolved factor was public in the circular at ex_date, so applying it to any
+  asof ≥ ex_date is information-set-honest; before the operator enters it the build only
+  over-blocks — conservative, never leaks; quantized-close rounding bias closed by the
+  factor-path rule) PASS with argument recorded. risk (pre-ex closure property-locked; an action
+  with available_at > asof not blocking is CONSISTENT with the P0-10 carried WARN — the pre-ex
+  announce window awaits P0-21 timestamps; operator-input failure modes all ConfigError; exposure
+  measured) PASS. execution (strict e > d boundary — ex-day unadjusted, live-verified; BL never
+  becomes a close; volume raw is execution-correct since §3 liquidity math is value-based; NEW
+  CARRY: P1-07's fill realism needs a band/circuit source before backtest claims — band_hit NULL
+  until then) 1 CARRY. portfolio (all 4 DoD clauses demonstrated; RB-4 workflow now names the
+  file; deferrals recorded; curated versions are NOT in the backup set — disposable by design,
+  doc 08 — version GC is ops housekeeping) PASS.
+- Findings tally: 1 WARN (doc 17 RB-4 — fixed), 2 NOTE (determinism-breach test — added;
+  tie-safety comment — added), 1 CARRY to P1-07 (band/circuit source), 0 CRITICAL.

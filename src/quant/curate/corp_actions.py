@@ -18,7 +18,8 @@ never inverted:
   * buyback / demerger / other: no ratio/cash; demerger+other+rights always needs_review.
 `available_at` is set to ex_date (00:00, naive) — the feed carries no broadcast timestamp
 (caBroadcastDate is null); this is look-ahead-safe and P0-21 refines it. The build is a pure
-deterministic function of its input frame; it returns a validated frame (persistence is P0-11).
+deterministic function of its input frame; it returns a validated frame that curate/build.py
+publishes atomically (ADR-024).
 """
 
 import re
@@ -30,9 +31,9 @@ import pandas as pd
 import pyarrow as pa
 import structlog
 
-from quant.config import Settings
+from quant.config import CAResolution, Settings
 from quant.curate.parsers.corp_actions import parse_corp_actions
-from quant.errors import ContractViolation
+from quant.errors import ConfigError, ContractViolation
 from quant.ingest import RawStore
 from quant.schemas import DATE, I32, STR, TS, CorporateActions, dec
 
@@ -109,10 +110,18 @@ class Classification:
 
 @dataclass(frozen=True)
 class CorpActionsTables:
-    """The validated corporate_actions frame plus the build-report counters (ADR-023)."""
+    """The validated corporate_actions frame, build counters, and CA coverage bounds (ADR-024).
+
+    coverage_floor = min parsed ex_date (>= the true fetch-window start, so conservative);
+    coverage_ceiling = max fetch-window end (registry logical_date). The adjuster refuses to
+    adjust price dates outside [floor, ceiling] — a missing forward action would silently
+    mis-scale every earlier price (the P0-10 missing-past bias).
+    """
 
     corporate_actions: pd.DataFrame
     stats: dict[str, int]
+    coverage_floor: date | None = None
+    coverage_ceiling: date | None = None
 
 
 _MEETING = Classification(None, None, None, None, None)
@@ -234,8 +243,19 @@ def _is_meeting(s: str) -> bool:
 _TableRow = tuple[str, date, str, int | None, int | None, Decimal | None, str, str, datetime]
 
 
-def build_corp_actions_frames(parsed: pd.DataFrame) -> CorpActionsTables:
-    """Pure deterministic core: parsed feed frame → validated corporate_actions table + stats."""
+def build_corp_actions_frames(
+    parsed: pd.DataFrame,
+    resolutions: list[CAResolution] | None = None,
+    coverage_ceiling: date | None = None,
+) -> CorpActionsTables:
+    """Pure deterministic core: parsed feed frame → validated corporate_actions table + stats.
+
+    resolutions (config/ca-resolutions.yaml, RB-4) flip matching needs_review rows to
+    resolved and fill their ratio terms; an unmatched or ambiguous resolution is a
+    ConfigError — an operator fact that no longer matches reality must fail loudly, never
+    be silently ignored. coverage_ceiling is the fetch-window end (registry logical_date),
+    not derivable from the parsed rows themselves.
+    """
     stats: dict[str, int] = {
         "parsed_rows": len(parsed),
         "non_equity_dropped": 0,
@@ -300,10 +320,63 @@ def build_corp_actions_frames(parsed: pd.DataFrame) -> CorpActionsTables:
         stats[f"kind_{cls.kind}"] += 1
     # Dedupe exact duplicates from overlapping fetch windows; distinct same-day actions survive.
     unique = sorted(set(rows), key=_sort_key)
+    stats["resolved"] = 0
+    if resolutions:
+        unique = _apply_resolutions(unique, resolutions, stats)
     stats["rows"] = len(unique)
     frame = _to_frame(unique)
+    floor = parsed["ex_date"].dropna().min() if len(parsed) else None
+    coverage_floor: date | None = None if pd.isna(floor) else floor
     log.info("corp_actions_built", **stats)
-    return CorpActionsTables(corporate_actions=frame, stats=stats)
+    return CorpActionsTables(
+        corporate_actions=frame,
+        stats=stats,
+        coverage_floor=coverage_floor,
+        coverage_ceiling=coverage_ceiling,
+    )
+
+
+def _apply_resolutions(
+    rows: list[_TableRow], resolutions: list[CAResolution], stats: dict[str, int]
+) -> list[_TableRow]:
+    """Flip each resolution's target row needs_review → resolved with the operator's terms.
+
+    A resolution must hit EXACTLY one needs_review row: zero hits means the operator fact no
+    longer matches the feed (stale/typo — ConfigError), two+ means the key is ambiguous and
+    silently picking one could mis-adjust money (ConfigError; operator disambiguates first).
+    """
+    out = list(rows)
+    for res in resolutions:
+        hits = [
+            i
+            for i, r in enumerate(out)
+            if r[0] == res.isin
+            and r[1] == res.ex_date
+            and r[2] == res.kind
+            and r[6] == "needs_review"
+        ]
+        if len(hits) != 1:
+            raise ConfigError(
+                f"ca-resolutions: ({res.isin}, {res.ex_date}, {res.kind}) matched "
+                f"{len(hits)} needs_review rows; expected exactly 1 — "
+                + ("stale or mistyped entry" if not hits else "ambiguous key; disambiguate")
+            )
+        i = hits[0]
+        r = out[i]
+        out[i] = (
+            r[0],
+            r[1],
+            r[2],
+            res.ratio_num,
+            res.ratio_den,
+            r[5],
+            "resolved",
+            f"{r[7]} | resolved: {res.source_ref}",
+            r[8],
+        )
+        stats["resolved"] += 1
+        stats["needs_review"] -= 1
+    return out
 
 
 def _sort_key(r: _TableRow) -> tuple[str, date, str, int, int, str, str]:
@@ -336,14 +409,19 @@ def _to_frame(rows: list[_TableRow]) -> pd.DataFrame:
     return CorporateActions.validate(frame, lazy=True)
 
 
-def build_corp_actions(settings: Settings | None = None) -> CorpActionsTables:
+def build_corp_actions(
+    settings: Settings | None = None,
+    resolutions: list[CAResolution] | None = None,
+) -> CorpActionsTables:
     """Build the corporate_actions table from every registered corp_actions window in the vault."""
     store = RawStore(settings)
-    frames = [parse_corp_actions(a.path.read_bytes()) for a in store.latest_per_date(SOURCE)]
+    artifacts = store.latest_per_date(SOURCE)
+    frames = [parse_corp_actions(a.path.read_bytes()) for a in artifacts]
     if not frames:
         raise ContractViolation("no corp_actions raw files registered; nothing to build")
     parsed: pd.DataFrame = pd.concat(frames, ignore_index=True)
-    return build_corp_actions_frames(parsed)
+    ceiling = max(a.logical_date for a in artifacts)
+    return build_corp_actions_frames(parsed, resolutions=resolutions, coverage_ceiling=ceiling)
 
 
 __all__ = [

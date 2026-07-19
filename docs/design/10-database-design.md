@@ -52,8 +52,16 @@ CREATE TABLE run (run_id TEXT PRIMARY KEY, kind TEXT, book_id TEXT,
 ## Physical strategy
 Parquet partitioned by year for `prices_adj` and `fundamentals_pit`; files sorted
 (isin, d) — DuckDB zone-maps make explicit indexes unnecessary at this scale (~10⁷ rows,
-low-GB total). Operational tables live in one DuckDB file, WAL-checkpointed after jobs,
-included in nightly backup. Migrations: additive columns + versioned views; destructive
+low-GB total). Curated versions are immutable directories
+`data/curated/versions/<run_id>/` behind a one-line `CURRENT` pointer swapped atomically
+(os.replace) — readers never see a torn store; identical inputs re-derive the same run_id
+and republish is a byte-verified no-op (ADR-024). `prices_adj` holds ONE row per (isin, d):
+the primary equity series by the include-list priority EQ>BE>BZ>SM>ST>SZ (auxiliary window
+rows BL/T0/BO/IL and bond/unit series excluded, counted); o/h/l/c are paisa-quantized
+adjusted values, `close_unadj`/`volume`/`traded_value` stay raw (liquidity math is
+adjustment-invariant), and exact returns come from `close_unadj × adj_factor` (ADR-024);
+`band_hit` stays NULL until a band source lands. Operational tables live in one DuckDB
+file, WAL-checkpointed after jobs, included in nightly backup. Migrations: additive columns + versioned views; destructive
 changes require rebuild (which we can always do — ADR-016). DECIMAL always carries explicit
 (p,s) — DuckDB defaults bare DECIMAL to (18,3) — and typed reads go through the Arrow path
 (quant.schemas.arrow_frame), never .df(), which degrades DECIMAL to float64 (ADR-021).

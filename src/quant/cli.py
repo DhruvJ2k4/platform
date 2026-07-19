@@ -130,6 +130,40 @@ def _ingest_symbolchange(
     )
 
 
+@app.command()
+def curate(
+    rebuild: bool = typer.Option(False, "--rebuild", help="full deterministic rebuild + publish"),
+    incremental: bool = typer.Option(
+        False, "--incremental", help="incremental update (not yet implemented; use --rebuild)"
+    ),
+    asof: str | None = typer.Option(None, "--asof", help="build as-of ISO date (default today)"),
+    json_out: bool = typer.Option(False, "--json", help="print the full JSON report"),
+) -> None:
+    """Rebuild the curated store from the raw vault and publish atomically (doc 06 §6.2)."""
+    from quant.curate.build import curate_rebuild  # heavy import deferred off CLI startup
+
+    try:
+        if rebuild == incremental:
+            raise ConfigError("provide exactly one of --rebuild or --incremental")
+        if incremental:
+            raise ConfigError(
+                "curate --incremental is not implemented yet (P0-11 recorded deferral): "
+                "--rebuild is the correctness path; incremental lands with the nightly era"
+            )
+        d = _parse_iso(asof, "--asof") if asof is not None else datetime.date.today()
+        report = curate_rebuild(d)
+    except PlatformError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    if json_out:
+        typer.echo(json.dumps(report.as_dict()))
+    else:
+        typer.echo(
+            f"{report.run_id}: {'published' if report.created else 'no-op (identical)'} "
+            f"asof={report.asof} rows={report.stats['tables']}"
+        )
+
+
 def _ingest_corp_actions(
     date: str | None, since: str | None, until: str | None, weekends: bool
 ) -> corp_actions.IngestSummary:

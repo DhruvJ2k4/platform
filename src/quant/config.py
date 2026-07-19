@@ -165,6 +165,49 @@ def source_spec(name: str, settings: Settings | None = None) -> SourceSpec:
     return sources[name]
 
 
+class CAResolution(BaseModel):
+    """One operator-entered corporate-action resolution (RB-4; ADR-024).
+
+    Keyed to exactly one needs_review corporate_actions row by (isin, ex_date, kind). The
+    ratio keeps the row kind's semantics (doc 21 §1): split/rights/demerger/other →
+    factor = ratio_den/ratio_num; bonus (X:Y terms) → ratio_den/(ratio_num+ratio_den).
+    source_ref cites the exchange circular.
+    Resolutions live in config because curated is a function of (raw, code, config) — an
+    operational-DB row would be silently wiped by every rebuild (doc 08).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    isin: str = Field(min_length=12, max_length=12)
+    ex_date: date
+    kind: str  # matched against the needs_review row's kind; validated at apply time
+    ratio_num: int = Field(gt=0)
+    ratio_den: int = Field(gt=0)
+    source_ref: str = Field(min_length=1)  # exchange circular reference — never optional
+
+
+def load_ca_resolutions(settings: Settings | None = None) -> list[CAResolution]:
+    """Load config/ca-resolutions.yaml; empty list allowed; malformed entries fail loudly."""
+    s = settings or Settings()
+    path = s.config_dir / "ca-resolutions.yaml"
+    data = load_yaml(path)
+    if not isinstance(data, dict) or "resolutions" not in data:
+        raise ConfigError(f"invalid config {path}: expected a 'resolutions' list (may be empty)")
+    entries = data["resolutions"]
+    if entries is None:
+        return []
+    if not isinstance(entries, list):
+        raise ConfigError(f"invalid config {path}: 'resolutions' must be a list")
+    try:
+        resolutions = [CAResolution.model_validate(e) for e in entries]
+    except ValidationError as exc:
+        raise ConfigError(f"invalid config {path}: {exc}") from exc
+    keys = [(r.isin, r.ex_date, r.kind) for r in resolutions]
+    if len(keys) != len(set(keys)):
+        raise ConfigError(f"invalid config {path}: duplicate (isin, ex_date, kind) resolution")
+    return resolutions
+
+
 def load_muhurat_dates(settings: Settings | None = None) -> frozenset[date]:
     """Operator-maintained Muhurat session dates from config/calendar.yaml (P0-08 finding:
     neither UDiFF SsnId nor weekend presence can identify Muhurat from data alone)."""

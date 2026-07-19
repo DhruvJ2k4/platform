@@ -14,9 +14,11 @@ re-curate; add fixture test. Announcements feed: check 7-day lookback covered th
 **RB-3 Bad data suspected downstream:** freeze proposals (`status: hold` flag); identify
 offending raw watermark from manifests; correct parser/CA entry; `curate --rebuild`;
 compare champion regression pin; unfreeze. Never hand-edit curated (it will be rebuilt away).
-**RB-4 Demerger queue item:** gather scheme ratio from exchange circular; enter resolved
-CA row (source_ref = circular); rebuild affected ISIN; verify against Screener price
-chart visually; log.
+**RB-4 CA review-queue item (demerger/rights/other):** gather the factor from the exchange
+circular; add a resolution entry to `config/ca-resolutions.yaml` keyed (isin, ex_date, kind)
+with source_ref = circular (ratio semantics per kind — see the file header; NEVER a DB row,
+which a rebuild would wipe, ADR-024); `curate --rebuild`; verify the unblocked pre-ex prices
+against a Screener chart visually; log.
 **RB-5 Broker reconciliation mismatch:** proposals blocked automatically; import fresh
 holdings CSV; diff vs. ledger; usual causes: unrecorded fill, CA on holding (check queue),
 manual trade outside system (enter with reason code).
