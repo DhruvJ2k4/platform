@@ -26,8 +26,12 @@ def _config(tmp_path: Path, body: str) -> Settings:
 
 
 class TestLoader:
-    def test_committed_scaffold_loads_empty(self) -> None:
-        assert load_ca_resolutions() == []  # the real config/ca-resolutions.yaml
+    def test_committed_config_loads_cleanly(self) -> None:
+        # The real config/ca-resolutions.yaml: every committed entry must validate (the
+        # 2026-07-19 RB-4 batch made it non-empty; emptiness was never the contract).
+        entries = load_ca_resolutions()
+        assert all(isinstance(e, CAResolution) for e in entries)
+        assert all(e.cash_amount is not None for e in entries if e.kind == "dividend")
 
     def test_valid_entry_loads(self, tmp_path: Path) -> None:
         s = _config(

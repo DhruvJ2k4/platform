@@ -40,4 +40,83 @@
 #   equal to a same-day sibling's degrades the whole group to ambiguous — RB-4);
 # - resolutions live HERE (config@git) because curated is a deterministic function of
 #   (raw, code, config) — doc 08; an operational-DB row would be wiped by every rebuild.
-resolutions: []
+# Batch filed 2026-07-19 (RB-4; one batch, before any P0-13/universe results — ADR-025).
+# Amounts are AS-DECLARED per-share figures verified against ≥2 independent disclosures
+# (contemporaneous announcement/news + exchange dividend history), never aggregator
+# "adjusted" values. Two of the 16 review rows are deliberately NOT resolved — feed
+# artifacts with no honest cash amount (see ops/journal.md 2026-07-19):
+#   INE201P01022 (GRINFRA) 2022-11-17 — interim deferred at the 2022-11-10 board meeting,
+#     never declared; no FY23 payout exists in any as-declared history.
+#   INE490G01020 (MOIL) 2022-02-17 — no dividend went ex that day; the actual FY22 interim
+#     (Rs 3.00) went ex 2022-02-24, record 2022-02-26. The row's ex_date itself is wrong.
+resolutions:
+  - isin: INE032B01021
+    ex_date: 2024-06-20
+    kind: dividend
+    cash_amount: 1.00
+    source_ref: "Prime Securities FY24 final Rs 1/share — feed subject '1 Rs Per Share'; exchange dividend history ex 2024-06-20 Rs 1.00"
+  - isin: INE054A01019
+    ex_date: 2022-03-08
+    kind: dividend
+    cash_amount: 2.50
+    source_ref: "VIP Industries FY22 interim Rs 2.50/share (125% of FV2), announced 2022-02-17, ex 2022-03-08 record 2022-03-09 — goodreturns + stockanalysis histories"
+  - isin: INE076B01010
+    ex_date: 2024-07-15
+    kind: dividend
+    cash_amount: 4.00
+    source_ref: "Siyaram Silk Mills FY24 final Rs 4/share (200% of FV2), ex 2024-07-15 — goodreturns + stockanalysis histories"
+  - isin: INE083C01014
+    ex_date: 2023-06-23
+    kind: dividend
+    cash_amount: 4.00
+    source_ref: "Plastiblends India FY23 final Rs 4/share (80% of FV5), announced 2023-05-03, ex 2023-06-23 — goodreturns + stockanalysis histories"
+  - isin: INE0FS801015
+    ex_date: 2022-08-12
+    kind: dividend
+    cash_amount: 0.85
+    source_ref: "Motherson Sumi Wiring FY22 final Rs 0.85/share, board-recommended 2022-05-26, ex 2022-08-12 — board outcome news + trendlyne (as-declared; later 2:5 and 1:2 bonuses make aggregator-adjusted views differ)"
+  - isin: INE205A01025
+    ex_date: 2022-03-09
+    kind: dividend
+    cash_amount: 13.00
+    source_ref: "Vedanta 3rd interim FY22 Rs 13/share, declared 2022-03-02, record 2022-03-10 — BusinessToday/ZeeBiz contemporaneous"
+  - isin: INE228I01012
+    ex_date: 2022-09-22
+    kind: dividend
+    cash_amount: 0.50
+    source_ref: "Asahi Songwon Colors FY22 final Rs 0.50/share (5% of FV10, 'Revised'), announced 2022-05-19, ex 2022-09-22 — goodreturns + stockanalysis histories"
+  - isin: INE256C01024
+    ex_date: 2023-09-01
+    kind: dividend
+    cash_amount: 3.25
+    source_ref: "Triveni Engineering FY23 final Rs 3.25/share (FV1), AGM-approved 2023-09-08, ex 2023-09-01 — AGM outcome news + stockanalysis history"
+  - isin: INE259A01022
+    ex_date: 2024-05-22
+    kind: dividend
+    cash_amount: 36.00
+    source_ref: "Colgate-Palmolive interim Rs 26 + special Rs 10 = Rs 36/share total for this compound row, ex 2024-05-22 record 2024-05-23 — feed subject components + exchange dividend history total 36.00"
+  - isin: INE395H01011
+    ex_date: 2022-02-24
+    kind: dividend
+    cash_amount: 1.00
+    source_ref: "Steel City Securities interim Re 1/share, ex 2022-02-24 record 2022-02-25 — equity dividend history ('Interest' in feed subject is a typo for Interim; confirmed an equity cash dividend)"
+  - isin: INE466L01020
+    ex_date: 2022-06-01
+    kind: dividend
+    cash_amount: 20.00
+    source_ref: "IIFL Wealth interim Rs 20/share as declared, ex 2022-06-01 record 2022-06-02 — feed subject 'Rs - 20' + allpaisa; aggregator shows 5.00 = post 2023-03-02 1:1 bonus + 2:1 split (x4) adjusted, NOT as-declared"
+  - isin: INE542W01017
+    ex_date: 2022-05-12
+    kind: dividend
+    cash_amount: 2.10
+    source_ref: "KPI Green Energy interim Rs 2.10/share (21% of FV10) FY23, declared 2022-05-07, record 2022-05-16 — NSE archives corporate filing KPIGREEN 09-May-2022"
+  - isin: INE760L01018
+    ex_date: 2022-08-19
+    kind: dividend
+    cash_amount: 1.00
+    source_ref: "Tribhovandas Bhimji Zaveri FY22 final Re 1/share, ex 2022-08-19 record 2022-08-22 — feed subject 'R E 1' + exchange dividend history"
+  - isin: INE976R01017
+    ex_date: 2025-03-19
+    kind: dividend
+    cash_amount: 0.50
+    source_ref: "AGI Infra interim Rs 0.50/share FY25, ex 2025-03-19 — MarketScreener/capitalmarket contemporaneous (as-declared; pre 2025-10-10 5:1 split)"

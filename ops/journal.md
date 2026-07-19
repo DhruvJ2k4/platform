@@ -402,3 +402,44 @@
   2022-02-17 (typo subject); INE542W01017 2022-05-12 (Rs 2.10); INE760L01018 2022-08-19
   (R E 1); INE976R01017 2025-03-19 (Rs 0.50). Query to regenerate: corporate_actions where
   kind='dividend' and status='needs_review'. All 16 sit on distinct (isin, ex_date) keys.
+
+## 2026-07-19 — RB-4 batch: the 16 amount-less dividends (filed by Claude, operator-delegated)
+- Operator delegated the RB-4 backlog ("do this yourself"). Filed as ONE batch before any
+  P0-13/universe results exist (ADR-025 pre-registration discipline). Every amount verified
+  against >=2 independent disclosures (contemporaneous announcement/news + exchange dividend
+  history); source_ref cites exactly what was checked, not a pro-forma circular reference.
+- 14 of 16 RESOLVED (config/ca-resolutions.yaml): PRIMESECU 1.00, VIPIND 2.50, SIYSIL 4.00,
+  PLASTIBLEN 4.00, MSUMI 0.85, VEDL 13.00 (3rd interim FY22), ASAHISONG 0.50 (5% 'Revised' —
+  genuinely 50 paise), TRIVENI 3.25, COLPAL 36.00 (26+10 compound), STEELCITY 1.00 ("Interest
+  Dividend" = feed typo for Interim; confirmed an equity cash dividend), IIFLWAM 20.00,
+  KPIGREEN 2.10 (NSE archives filing 09-May-2022), TBZ 1.00, AGIIL 0.50.
+- 2 of 16 are FEED ARTIFACTS — deliberately NOT resolved (no honest cash amount exists):
+  * GRINFRA 2022-11-17: the 2022-11-10 board outcome DEFERRED the interim; no FY23 payout in
+    any as-declared history (payout ratio 0% those years); trendlyne's matching amount-less
+    row mirrors the same NSE feed artifact. A record-date row for a dividend never declared.
+  * MOIL 2022-02-17: no dividend went ex that day — the real FY22 interim (Rs 3.00) went ex
+    2022-02-24, record 2022-02-26. The row's EX_DATE itself is wrong (stale/withdrawn
+    intimation). Resolving would credit real money on a fictional date.
+  Both stay needs_review (their pre-ex windows stay blocked — miss beats guess). They are the
+  live instances of the ADR-025 no-effect-shape gap (P1-03 carry): a resolution shape that
+  says "this row has no cash effect" without fabricating a credit.
+- METHOD TRAP recorded: aggregator dividend tables show split/bonus-ADJUSTED amounts.
+  Caught via 360ONE showing 5.00 for IIFL Wealth's as-declared Rs 20 (post 1:1 bonus + 2:1
+  split = /4; the Aug/Oct 2022 rows 3.75/4.25 are exactly declared 15/17 over 4). Rule
+  applied: check our own CA table for later split/bonus rows on the ISIN; if any exist, only
+  contemporaneous as-declared sources count (KPIGREEN, AGIIL, MSUMI, IIFLWAM affected).
+- Live verification on the republished store (curate-20260715-d4fa959a; prior asof kept so
+  the manifest delta is config-hash-only): resolved=14, needs_review 276->262; dividend
+  surface needs_review_excluded 16->2, credits 7231->7245, ambiguous_rows=10 UNCHANGED;
+  conservation exact 7270 = 7258 + 10 + 2; all 14 credits equal the verified amounts to the
+  paisa; 655 pre-ex price rows released (published 1939557->1940212), blocked_isins 196->187
+  (VEDL keeps a second pending non-dividend row; some resolved names have no pre-ex panel
+  rows in the sparse vault).
+- Test evolution: test_committed_scaffold_loads_empty -> test_committed_config_loads_cleanly
+  (the contract was always "the committed config validates", not emptiness).
+- Latent test leak exposed by the batch: tests/integration/test_curate_publish.py pinned
+  data_dir to the fixture vault but inherited the REPO's config_dir (comment even said so) —
+  green only while ca-resolutions.yaml was empty; the first real RB-4 entry turned 6 tests
+  red via the stale-key ConfigError doing its job. Fixed by making the fixture hermetic
+  (tmp config with pinned calendar.yaml + empty resolutions; CLI test also sets
+  PLATFORM_CONFIG_DIR): curated = f(raw, code, CONFIG) now holds for tests too.

@@ -82,7 +82,15 @@ def _udiff_zip(d: date, close: str) -> bytes:
 
 @pytest.fixture
 def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
-    s = Settings(data_dir=tmp_path / "data")  # config_dir stays the repo's committed config/
+    # Hermetic config: curated = f(raw, code, CONFIG) — the fixture vault must pair with a
+    # pinned config, never the repo's live one (whose ca-resolutions.yaml carries real RB-4
+    # entries that match nothing in fixture data and loudly ConfigError, by design).
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    repo_config = Path(__file__).resolve().parents[2] / "config"
+    (config_dir / "calendar.yaml").write_bytes((repo_config / "calendar.yaml").read_bytes())
+    (config_dir / "ca-resolutions.yaml").write_text("resolutions: []\n")
+    s = Settings(data_dir=tmp_path / "data", config_dir=config_dir)
     store = RawStore(s)
     from datetime import datetime
 
@@ -170,6 +178,7 @@ class TestCli:
         self, settings: Settings, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("PLATFORM_DATA_DIR", str(settings.data_dir))
+        monkeypatch.setenv("PLATFORM_CONFIG_DIR", str(settings.config_dir))
         result = CliRunner().invoke(app, ["curate", "--rebuild", "--asof", "2026-06-30", "--json"])
         assert result.exit_code == 0, result.output
         payload = json.loads(result.output.strip().splitlines()[-1])
