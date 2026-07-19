@@ -14,11 +14,18 @@ re-curate; add fixture test. Announcements feed: check 7-day lookback covered th
 **RB-3 Bad data suspected downstream:** freeze proposals (`status: hold` flag); identify
 offending raw watermark from manifests; correct parser/CA entry; `curate --rebuild`;
 compare champion regression pin; unfreeze. Never hand-edit curated (it will be rebuilt away).
-**RB-4 CA review-queue item (demerger/rights/other):** gather the factor from the exchange
-circular; add a resolution entry to `config/ca-resolutions.yaml` keyed (isin, ex_date, kind)
-with source_ref = circular (ratio semantics per kind — see the file header; NEVER a DB row,
-which a rebuild would wipe, ADR-024); `curate --rebuild`; verify the unblocked pre-ex prices
-against a Screener chart visually; log.
+**RB-4 CA review-queue item (demerger/rights/other/amount-less dividend):** gather the factor
+— or, for an amount-less dividend, THAT ROW's per-share amount (never the ex-date group
+total; same-day payable rows sum downstream), as disclosed on or before ex_date — from the
+exchange/company circular; add a resolution entry to `config/ca-resolutions.yaml` keyed
+(isin, ex_date, kind) with source_ref = circular (ratio semantics per kind, dividend =
+cash_amount only — see the file header; NEVER a DB row, which a rebuild would wipe,
+ADR-024/025); `curate --rebuild`; verify: ratio kinds → unblocked pre-ex prices against a
+Screener chart visually; dividend → the chart proves nothing (cash never moves prices) —
+instead confirm the credit appears in the dividend cash surface at the circular amount and
+`ambiguous_rows` did not grow; file backlogs as ONE batch before any universe/backtest
+results exist (selective filing = result-conditioned history editing; the publish manifest's
+config hash pins resolution state); log.
 **RB-5 Broker reconciliation mismatch:** proposals blocked automatically; import fresh
 holdings CSV; diff vs. ledger; usual causes: unrecorded fill, CA on holding (check queue),
 manual trade outside system (enter with reason code).

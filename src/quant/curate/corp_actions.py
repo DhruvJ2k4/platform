@@ -14,7 +14,8 @@ never inverted:
     faceVal is anachronistic (current, not at ex_date) so issue price S=FV+premium cannot be
     reconstructed and P_cum is unknown here; the operator enters the factor.
   * dividend: cash_amount = Σ per-share amounts (interim+special summed); not price-adjusted
-    (cash-credited, doc 21 §1). No amount parseable → needs_review.
+    (cash-credited, doc 21 §1). No amount parseable → needs_review; the operator cash-resolves
+    it from the circular via config/ca-resolutions.yaml (cash_amount, no ratio — ADR-025).
   * buyback / demerger / other: no ratio/cash; demerger+other+rights always needs_review.
 `available_at` is set to ex_date (00:00, naive) — the feed carries no broadcast timestamp
 (caBroadcastDate is null); this is look-ahead-safe and P0-21 refines it. The build is a pure
@@ -251,10 +252,11 @@ def build_corp_actions_frames(
     """Pure deterministic core: parsed feed frame → validated corporate_actions table + stats.
 
     resolutions (config/ca-resolutions.yaml, RB-4) flip matching needs_review rows to
-    resolved and fill their ratio terms; an unmatched or ambiguous resolution is a
-    ConfigError — an operator fact that no longer matches reality must fail loudly, never
-    be silently ignored. coverage_ceiling is the fetch-window end (registry logical_date),
-    not derivable from the parsed rows themselves.
+    resolved and fill the kind's terms (ratio kinds → ratio_num/ratio_den; dividend →
+    cash_amount, ADR-025); an unmatched or ambiguous resolution is a ConfigError — an
+    operator fact that no longer matches reality must fail loudly, never be silently
+    ignored. coverage_ceiling is the fetch-window end (registry logical_date), not
+    derivable from the parsed rows themselves.
     """
     stats: dict[str, int] = {
         "parsed_rows": len(parsed),
@@ -344,6 +346,9 @@ def _apply_resolutions(
     A resolution must hit EXACTLY one needs_review row: zero hits means the operator fact no
     longer matches the feed (stale/typo — ConfigError), two+ means the key is ambiguous and
     silently picking one could mis-adjust money (ConfigError; operator disambiguates first).
+    A ratio-kind resolution fills the ratio terms; a dividend resolution fills cash_amount
+    (the per-share total from the circular, ADR-025) — the config model guarantees each
+    shape, so the row's other money column is untouched, never overwritten with None.
     """
     out = list(rows)
     for res in resolutions:
@@ -363,19 +368,41 @@ def _apply_resolutions(
             )
         i = hits[0]
         r = out[i]
+        num, den = (r[3], r[4]) if res.kind == "dividend" else (res.ratio_num, res.ratio_den)
+        cash = res.cash_amount if res.kind == "dividend" else r[5]
         out[i] = (
             r[0],
             r[1],
             r[2],
-            res.ratio_num,
-            res.ratio_den,
-            r[5],
+            num,
+            den,
+            cash,
             "resolved",
             f"{r[7]} | resolved: {res.source_ref}",
             r[8],
         )
         stats["resolved"] += 1
         stats["needs_review"] -= 1
+        if res.kind == "dividend":
+            siblings = [
+                r2
+                for j, r2 in enumerate(out)
+                if j != i
+                and r2[0] == res.isin
+                and r2[1] == res.ex_date
+                and r2[2] == "dividend"
+                and r2[6] != "needs_review"
+            ]
+            if siblings:
+                # The resolution is THIS row's amount; same-day payable rows SUM in the
+                # dividend surface — surfaced so an accidental group-total entry is caught.
+                log.warning(
+                    "dividend_resolution_has_payable_siblings",
+                    isin=res.isin,
+                    ex_date=str(res.ex_date),
+                    siblings=len(siblings),
+                    resolved_amount=str(res.cash_amount),
+                )
     return out
 
 

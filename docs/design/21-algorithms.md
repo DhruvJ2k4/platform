@@ -26,6 +26,9 @@ reorganizations, ADR-023): no reliable formula → `needs_review`; blocks the IS
 ADR-024); operator enters the resolved factor from the exchange circular (RB-4) into
 config/ca-resolutions.yaml — ratio columns keep the row kind's semantics (resolved
 rights/demerger/other → factor `ratio_den/ratio_num`; resolved bonus → `den/(num+den)`).
+An amount-less **dividend** in review is cash-resolved the same way (`cash_amount` = that
+ROW's per-share amount from the circular, not the ex-date group total — same-day payable
+rows sum downstream; no ratio — dividends never factor; ADR-025).
 **Coverage bounds (ADR-024):** price dates outside [min CA ex_date observed, CA fetch-window
 end] are excluded, never partially adjusted — a missing forward action would silently mis-scale
 every earlier price. **Factors are exact rationals** (Fraction products); adjusted o/h/l/c =

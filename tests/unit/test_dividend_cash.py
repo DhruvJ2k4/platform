@@ -9,10 +9,14 @@ from datetime import date, datetime
 from decimal import Decimal as D
 from pathlib import Path
 
+import pytest
+
 from conftest import ca_frame
+from quant.config import CAResolution
 from quant.curate.corp_actions import build_corp_actions_frames
 from quant.curate.dividends import build_dividend_cash
 from quant.curate.parsers.corp_actions import parse_corp_actions
+from quant.errors import ContractViolation
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "corp_actions" / "corp_actions-trimmed.json"
 A, B = "INE000DIVAA1", "INE000DIVBB2"
@@ -47,6 +51,24 @@ class TestCredits:
         )
         assert res.credits.iloc[0]["amount_per_share"] == D("5.00")
 
+    def test_config_cash_resolution_flows_into_credits(self) -> None:
+        # ADR-025 end to end: the fixture's REAL amount-less "Interim Dividend" row credits
+        # exactly the operator's circular total once cash-resolved via config.
+        resolution = CAResolution(
+            isin="INE054A01019",
+            ex_date=date(2022, 3, 8),
+            kind="dividend",
+            cash_amount=D("20.00"),
+            source_ref="circular",
+        )
+        ca = build_corp_actions_frames(
+            parse_corp_actions(FIXTURE.read_bytes()), resolutions=[resolution]
+        ).corporate_actions
+        res = build_dividend_cash(ca)
+        assert res.stats["needs_review_excluded"] == 0  # the fixture's only such row resolved
+        row = res.credits[res.credits["isin"] == "INE054A01019"].iloc[0]
+        assert (row["ex_date"], row["amount_per_share"]) == (date(2022, 3, 8), D("20.00"))
+
 
 class TestExclusions:
     def test_equal_amount_pair_is_ambiguous_never_summed(self) -> None:
@@ -75,6 +97,43 @@ class TestExclusions:
             )
         )
         assert len(res.credits) == 0 and len(res.ambiguous) == 3
+
+    def test_resolved_amount_distinct_from_auto_sibling_sums(self) -> None:
+        # ADR-025 row-not-total semantics: the resolved row's amount joins the group sum.
+        res = build_dividend_cash(
+            ca_frame(
+                [
+                    (A, EX, "dividend", None, None, D("5.00"), "auto", "Special - Rs 5", AVAIL),
+                    (A, EX, "dividend", None, None, D("25.00"), "resolved", "d|res", AVAIL),
+                ]
+            )
+        )
+        assert len(res.credits) == 1
+        assert res.credits.iloc[0]["amount_per_share"] == D("30.00")
+
+    def test_resolved_amount_equal_to_auto_sibling_degrades_to_ambiguous(self) -> None:
+        # An operator amount colliding with a payable sibling is indistinguishable from a
+        # re-announced duplicate — conservative exclusion, surfaced; RB-4 checks the stats.
+        res = build_dividend_cash(
+            ca_frame(
+                [
+                    (A, EX, "dividend", None, None, D("20.00"), "auto", "Div - Rs 20", AVAIL),
+                    (A, EX, "dividend", None, None, D("20.00"), "resolved", "d|res", AVAIL),
+                ]
+            )
+        )
+        assert len(res.credits) == 0
+        assert len(res.ambiguous) == 2 and res.stats["ambiguous_rows"] == 2
+
+    def test_available_at_after_ex_date_is_a_contract_violation(self) -> None:
+        # Credit-time PIT rests on available_at <= ex_date (ADR-023/025); a P0-21
+        # broadcast-timestamp refinement must trip this loudly, never leak.
+        with pytest.raises(ContractViolation, match="available_at"):
+            build_dividend_cash(
+                ca_frame(
+                    [(A, EX, "dividend", None, None, D("5.00"), "auto", "d", datetime(2023, 8, 3))]
+                )
+            )
 
     def test_needs_review_dividend_never_credits(self) -> None:
         res = build_dividend_cash(

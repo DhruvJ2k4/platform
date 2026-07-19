@@ -11,9 +11,15 @@ duplicate from two genuine equal dividends — summing would silently double-cre
 cash. Policy (the platform's ambiguity rule): any (isin, ex_date) group containing an
 equal-amount pair is AMBIGUOUS — excluded from credits, returned separately, counted and
 warned; the operator resolves from the company circular (carried to P1-03 for a resolution
-mechanism if a held name ever hits one). needs_review dividends (amount-less/preference) are
-already in the review queue and never credit. Every input dividend row is accounted for:
-credited-source + ambiguous + needs_review rows sum to the input.
+mechanism if a held name ever hits one). AMOUNT-LESS needs_review dividends never credit
+until the operator cash-resolves them via config/ca-resolutions.yaml (cash_amount = that
+row's per-share amount, ADR-025) — a resolved row credits like any other, and a resolved
+amount equal to a payable sibling's degrades the group to ambiguous (conservative; RB-4
+checks the stats after rebuild). Preference/cumulative-dividend review rows must NEVER
+credit equity cash and so have no resolution shape yet (none live; P1-03). Credit-time PIT
+rests on available_at <= ex_date (ADR-023 sets them equal) — enforced here so a P0-21
+broadcast-timestamp refinement trips loudly instead of leaking. Every input dividend row
+is accounted for: credited-source + ambiguous + needs_review rows sum to the input.
 """
 
 from dataclasses import dataclass
@@ -25,6 +31,7 @@ import pyarrow as pa
 import structlog
 
 from quant.config import Settings
+from quant.errors import ContractViolation
 from quant.schemas import DATE, STR, Contract, dec, field
 
 log = structlog.get_logger()
@@ -58,6 +65,15 @@ def build_dividend_cash(corporate_actions: pd.DataFrame) -> DividendCash:
         "credits": 0,
     }
     payable = div[div["status"] != "needs_review"]
+    for row in payable.itertuples(index=False):
+        # PIT guard: crediting at ex_date is only honest if the fact was known by then.
+        # ADR-023 sets available_at == ex_date; P0-21 refinements must trip this loudly.
+        if pd.Timestamp(row.available_at) > pd.Timestamp(row.ex_date):
+            raise ContractViolation(
+                f"dividend row ({row.isin}, {row.ex_date}) has available_at "
+                f"{row.available_at} AFTER its ex_date — crediting at ex_date would leak; "
+                "carry available_at onto the credit surface before relaxing this (ADR-025)"
+            )
 
     keys: list[tuple[str, date]] = []
     amounts: list[Decimal] = []
@@ -67,12 +83,16 @@ def build_dividend_cash(corporate_actions: pd.DataFrame) -> DividendCash:
         if len(vals) != len(set(vals)):
             # An equal-amount pair: a re-announced duplicate is indistinguishable from two
             # genuine equal dividends — crediting either guess silently corrupts cash.
+            # A 'resolved' status here means an operator amount collided with a sibling —
+            # the group still degrades conservatively; RB-4's post-rebuild stats check
+            # surfaces it (no disambiguation mechanism exists until P1-03).
             ambiguous_index.extend(group.index)
             log.warning(
                 "dividend_ambiguous_equal_amounts",
                 isin=str(isin),
                 ex_date=str(ex),
                 amounts=[str(v) for v in vals],
+                statuses=[str(s) for s in group["status"]],
             )
             continue
         keys.append((str(isin), ex))

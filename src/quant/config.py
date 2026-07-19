@@ -11,10 +11,10 @@ from datetime import date
 from decimal import Decimal
 from itertools import pairwise
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Self
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from quant.errors import ConfigError
@@ -165,13 +165,20 @@ def source_spec(name: str, settings: Settings | None = None) -> SourceSpec:
     return sources[name]
 
 
-class CAResolution(BaseModel):
-    """One operator-entered corporate-action resolution (RB-4; ADR-024).
+_CA_KINDS = frozenset({"split", "bonus", "dividend", "demerger", "rights", "buyback", "other"})
 
-    Keyed to exactly one needs_review corporate_actions row by (isin, ex_date, kind). The
-    ratio keeps the row kind's semantics (doc 21 §1): split/rights/demerger/other →
-    factor = ratio_den/ratio_num; bonus (X:Y terms) → ratio_den/(ratio_num+ratio_den).
-    source_ref cites the exchange circular.
+
+class CAResolution(BaseModel):
+    """One operator-entered corporate-action resolution (RB-4; ADR-024/025).
+
+    Keyed to exactly one needs_review corporate_actions row by (isin, ex_date, kind).
+    Ratio kinds keep the row kind's semantics (doc 21 §1): split/rights/demerger/other →
+    factor = ratio_den/ratio_num; bonus (X:Y terms) → ratio_den/(ratio_num+ratio_den);
+    they carry ratio terms and never cash. kind='dividend' carries cash_amount — THIS
+    ROW's per-share amount from the circular (compound components summed, ADR-023), NOT
+    the ex-date group total: other payable dividend rows on the same (isin, ex_date)
+    credit separately and sum downstream — and never ratio terms (dividends have no price
+    factor, ADR-025). source_ref cites the circular.
     Resolutions live in config because curated is a function of (raw, code, config) — an
     operational-DB row would be silently wiped by every rebuild (doc 08).
     """
@@ -180,10 +187,37 @@ class CAResolution(BaseModel):
 
     isin: str = Field(min_length=12, max_length=12)
     ex_date: date
-    kind: str  # matched against the needs_review row's kind; validated at apply time
-    ratio_num: int = Field(gt=0)
-    ratio_den: int = Field(gt=0)
+    kind: str  # one of _CA_KINDS (validated below); matched against the needs_review row
+    ratio_num: int | None = Field(default=None, gt=0)
+    ratio_den: int | None = Field(default=None, gt=0)
+    cash_amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
     source_ref: str = Field(min_length=1)  # exchange circular reference — never optional
+
+    @field_validator("cash_amount", mode="before")
+    @classmethod
+    def _no_binary_floats(cls, v: object) -> object:
+        # The YAML loader never yields floats; this closes the programmatic path (doc 23).
+        if isinstance(v, float):
+            raise ValueError("cash_amount must be a Decimal/str/int, never a binary float")
+        return v
+
+    @model_validator(mode="after")
+    def _shape_matches_kind(self) -> Self:
+        if self.kind not in _CA_KINDS:
+            raise ValueError(f"unknown kind {self.kind!r}; known kinds: {sorted(_CA_KINDS)}")
+        if self.kind == "dividend":
+            if self.cash_amount is None or not (self.ratio_num is None and self.ratio_den is None):
+                raise ValueError(
+                    "a dividend resolution carries cash_amount (this row's per-share amount,"
+                    " paisa-quantized) and no ratio terms — dividends never price-adjust"
+                    " (ADR-025)"
+                )
+        elif self.ratio_num is None or self.ratio_den is None or self.cash_amount is not None:
+            raise ValueError(
+                f"a {self.kind} resolution carries ratio_num/ratio_den and no cash_amount "
+                "(ratio semantics per kind — doc 21 §1)"
+            )
+        return self
 
 
 def load_ca_resolutions(settings: Settings | None = None) -> list[CAResolution]:

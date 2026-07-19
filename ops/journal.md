@@ -343,3 +343,62 @@
   seats over the 2-file diff — zero findings. Notable probe: Decimal("0.3") == Decimal("0.30")
   so the equal-amount set-collapse also catches format-variant duplicates. Red→green: disabling
   the ambiguity exclusion fails 3 named tests.
+
+## 2026-07-19 — P0-12 follow-up: dividend cash resolutions (ADR-025)
+- Session-collision surprise: TWO sessions picked up P0-12 concurrently. This session read the
+  docs, probed the same 18 multi-row groups, and had operator sign-off on a THREE-part design
+  (new `dividend` doc-10 table + ambiguity→review + CAResolution cash extension) minutes AFTER
+  the other session pushed 6d1a102 (derived surface, no table, resolutions deferred to P1-03).
+  Operator arbitrated: keep the shipped no-table design; add the cash-resolution mechanism now
+  because the 16 needs_review dividends blocked 16 ISINs' pre-ex windows with NO RB-4 path —
+  P0-13's universe would inherit those blocks. Table promotion remains open if P1-03 finds the
+  import-consumption of load_dividend_cash ugly against doc 14's tables-are-the-API rule.
+- ADR-025: CAResolution is shape-per-kind — ratio kinds carry ratio_num/ratio_den, never cash;
+  kind='dividend' carries cash_amount (strictly positive, paisa-quantized; pydantic
+  decimal_places=2 probed to reject 2.105 loudly) and never ratio. _apply_resolutions fills the
+  kind's column, leaves the other untouched, flips needs_review→resolved (exactly-1 rule
+  unchanged). A resolved dividend credits through build_dividend_cash, stops blocking the
+  pre-ex window, and still never factors.
+- Probes before design: pydantic Field(gt=0, decimal_places=2) rejects 0/-1/2.105 and passes
+  20/2.1/2.10 exactly; float 2.1 coerces to Decimal('2.1') EXACTLY (str-path) though the
+  Decimal-safe YAML loader never produces floats anyway; pyarrow decimal128(12,2) rescales
+  Decimal('20')→20.00 safely and raises ArrowInvalid on 2.105 — defense in depth behind the
+  config gate.
+- Deliberately out of scope: filing the 16 real resolutions (operator work against circulars —
+  RB-4; the fixture's INE054A01019 "Interim Dividend" is the tested exemplar); equal-amount
+  ambiguous groups (their rows are auto, not needs_review — P1-03 carry unchanged).
+- Review: all 9 agents launched successfully this time (first task since P0-07 without the
+  org spend-limit inline fallback). Tally: 0 CRITICAL, 8 distinct WARN, 6 distinct NOTE
+  (kind-enum validation flagged independently by 5 seats). All fixed in-pass except two
+  recorded decisions:
+  (1) JUSTIFIED — resolved-amount-equals-sibling collision stays a conservative degrade-to-
+  ambiguous (warning + stats), NOT a ConfigError (risk seat's stronger option): no
+  disambiguation mechanism exists until P1-03, so a hard error would leave the operator
+  stuck with an unresolvable build; RB-4 now mandates the post-rebuild stats check, the
+  interaction is test-pinned, and ADR-025 records the mode.
+  (2) CARRIED — property coverage for _apply_resolutions (row-count conservation, non-target
+  rows untouched under arbitrary resolution sets) and the unit-vs-integration placement of
+  the unblock chain test → both to P1-03's resolution-mechanics revisit (test-warden NOTEs).
+  Also carried (methodology NOTE): ambiguous-group overlap with held/universe names becomes
+  measurable only when P0-13's universe exists — surface it in stats then.
+- Fixes applied from findings: per-ROW (not group-total) resolution semantics worded into
+  config header/ADR/doc 21/RB-4 + sibling warning in _apply_resolutions (exec+researcher's
+  over-credit trap, probed 25+5→30); kind enum validated at load ("unknown kind", 5 seats);
+  max_digits=12 + programmatic-float rejection on cash_amount (exec/money); available_at <=
+  ex_date PIT guard at credit derivation + test (researcher — trips loudly when P0-21
+  refines timestamps); doc 06 parenthetical (arch/docs); build_corp_actions_frames docstring
+  (contract/docs); dividends.py docstring scoped to amount-less rows, preference no-path
+  recorded (risk); matched-2 twin-dividend test (risk/money); RB-4 dividend verify clause +
+  disclosed-on-or-before-ex-date rule + batch-before-P0-13 discipline (PM/researcher);
+  doc 20 P0-12 row annotated with the ADR-025 reading (PM).
+- RB-4 worklist (one batch, BEFORE any P0-13/universe results — 16 amount-less dividends,
+  key = isin ex_date, subject hint in parens): INE032B01021 2024-06-20 (1 Rs); INE054A01019
+  2022-03-08 (amount-less); INE076B01010 2024-07-15 (malformed); INE083C01014 2023-06-23
+  (malformed); INE0FS801015 2022-08-12 (malformed); INE201P01022 2022-11-17 (amount-less);
+  INE205A01025 2022-03-09 (amount-less; ISIN also has a second pending non-dividend row);
+  INE228I01012 2022-09-22 (malformed); INE256C01024 2023-09-01 (malformed); INE259A01022
+  2024-05-22 (compound 10+26); INE395H01011 2022-02-24 ("Interest Dividend" Re 1 — verify
+  it IS an equity dividend before crediting); INE466L01020 2022-06-01 (Rs 20); INE490G01020
+  2022-02-17 (typo subject); INE542W01017 2022-05-12 (Rs 2.10); INE760L01018 2022-08-19
+  (R E 1); INE976R01017 2025-03-19 (Rs 0.50). Query to regenerate: corporate_actions where
+  kind='dividend' and status='needs_review'. All 16 sit on distinct (isin, ex_date) keys.

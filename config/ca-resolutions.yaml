@@ -1,11 +1,17 @@
-# Operator-entered corporate-action resolutions (RB-4 runbook; ADR-024; doc 21 §1).
+# Operator-entered corporate-action resolutions (RB-4 runbook; ADR-024/025; doc 21 §1).
 #
 # Each entry resolves exactly one needs_review corporate_actions row, keyed by
-# (isin, ex_date, kind). The ratio columns keep the ROW KIND's semantics (uniform whether a
+# (isin, ex_date, kind). Ratio kinds keep the ROW KIND's semantics (uniform whether a
 # row is auto or resolved — the adjuster has one rule per kind, doc 21 §1):
 #
 #   split / rights / demerger / other:  factor = ratio_den / ratio_num
 #   bonus (X:Y terms, X new per Y held): factor = ratio_den / (ratio_num + ratio_den)
+#   dividend: no ratio (dividends never price-adjust) — cash_amount instead: THIS ROW's
+#     per-share amount from the circular (compound components summed), paisa-quantized,
+#     as disclosed ON OR BEFORE ex_date (board outcome / record-date circular), never a
+#     later as-paid or corrective figure. NOT the ex-date group total: other payable
+#     dividend rows on the same (isin, ex_date) credit separately and SUM downstream
+#     (entering the group total would double-credit — ADR-025)
 #
 # e.g. a demerger where the remaining entity keeps 70% of pre-ex value:
 #   - isin: INE000A00000
@@ -15,10 +21,23 @@
 #     ratio_den: 7
 #     source_ref: "NSE circular NSE/CML/2025/xx — scheme of arrangement ratio"
 #
+# e.g. an amount-less feed dividend ("Interim Dividend") whose circular says Rs 20/share:
+#   - isin: INE000B00000
+#     ex_date: 2022-06-01
+#     kind: dividend
+#     cash_amount: 20.00
+#     source_ref: "company circular / exchange announcement ref — interim dividend Rs 20"
+#
 # Rules (enforced by the curation build):
 # - the (isin, ex_date, kind) key MUST match an existing needs_review row — an unmatched
-#   resolution is a ConfigError (loud), never silently ignored;
-# - ratio_num/ratio_den are strictly positive integers; source_ref (the circular) is mandatory;
+#   resolution is a ConfigError (loud), never silently ignored; an unknown kind is
+#   rejected at load;
+# - ratio_num/ratio_den are strictly positive integers (ratio kinds only); cash_amount is a
+#   strictly positive paisa-quantized amount (dividend only — mixing shapes is a ConfigError);
+#   source_ref (the circular) is mandatory;
+# - after a dividend resolution: rebuild, then confirm the credit appears in the dividend
+#   cash surface at the circular amount and ambiguous_rows did NOT grow (an entered amount
+#   equal to a same-day sibling's degrades the whole group to ambiguous — RB-4);
 # - resolutions live HERE (config@git) because curated is a deterministic function of
 #   (raw, code, config) — doc 08; an operational-DB row would be wiped by every rebuild.
 resolutions: []

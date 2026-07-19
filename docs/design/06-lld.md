@@ -15,7 +15,8 @@ NOT here — raw is stored regardless, parse failures surface in curation, data 
 **Interface:** `curate --rebuild|--incremental --asof <date>`. **Workflow:** parse (format-
 epoch-versioned parsers) → security master resolution (ISIN; effective-dated symbol/series)
 → corporate-action adjustment (splits/bonuses automated; **any needs_review CA —
-demerger/rights/other — → review queue** (ADR-023), the affected ISIN's PRE-EX window withheld
+demerger/rights/other/amount-less dividend (cash-resolved, ADR-025) — → review queue**
+(ADR-023), the affected ISIN's PRE-EX window withheld
 until the operator resolves via config/ca-resolutions.yaml — post-ex rows are provably
 unaffected and publish (ADR-024)) → PIT universe build → events diff → validation gate
 (schema + invariants; hard fail = no publish) → atomic publish (immutable
