@@ -318,3 +318,28 @@
   doc 08 — version GC is ops housekeeping) PASS.
 - Findings tally: 1 WARN (doc 17 RB-4 — fixed), 2 NOTE (determinism-breach test — added;
   tie-safety comment — added), 1 CARRY to P1-07 (band/circuit source), 0 CRITICAL.
+
+## 2026-07-19 — P0-12
+- Dividend cash surface landed (curate/dividends.py): per-(isin, ex_date) credits DERIVED from
+  the published corporate_actions table — doc 10's table set is frozen and docs 12/21 §11 credit
+  "from the CA table", so this is a derived read surface, not a new schema table (doc-20's word
+  "table" read accordingly; no contract change, no ADR needed).
+- Probe-first finding (a naive sum would have silently double-credited): 18 same-(isin, ex_date)
+  dividend groups in 5y. 13 have DISTINCT amounts — genuine interim+special/final pairs (L&T
+  24+6→30, Nestle 27+75→102) — these SUM. 5 are EQUAL-AMOUNT pairs (e.g. "Dividend Re 0.60" +
+  "Interim Dividend Re 0.60") where a feed re-announcement is indistinguishable from two genuine
+  equal dividends. Policy per the platform ambiguity rule: the whole group is excluded from
+  credits, surfaced verbatim + warned; operator resolves from the circular. Closes the P0-10
+  carry ("per-component rows if P0-12 needs them") — summed credits are exactly what the ledger
+  needs; components remain visible in corporate_actions.
+- Live DoD demo: 7,231 credits from the published CURRENT store; sample of 5 verified against
+  the RAW feed via an independent regex recomputation (no platform classifier): L&T 30.00,
+  Nestle 102.00, RELIANCE 10.00, TCS 28.00, Re1+Rs5 pair 6.00 — 5/5 MATCH. Conservation exact:
+  7,270 dividend rows = 7,244 credited-source + 10 ambiguous + 16 needs_review.
+- Carried to P1-03: an ambiguous-dividend resolution mechanism (feed re-announcement dedupe)
+  if a held name ever hits one (~1 group/yr, all micro-caps so far); ledger policy for holdings
+  with ambiguous dividends (flag/block, never guess).
+- Review ran INLINE again (org spend limit, precedent): money/arch/contract/test/docs + desk
+  seats over the 2-file diff — zero findings. Notable probe: Decimal("0.3") == Decimal("0.30")
+  so the equal-amount set-collapse also catches format-variant duplicates. Red→green: disabling
+  the ambiguity exclusion fails 3 named tests.
