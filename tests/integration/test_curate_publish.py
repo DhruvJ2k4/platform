@@ -90,6 +90,7 @@ def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
     repo_config = Path(__file__).resolve().parents[2] / "config"
     (config_dir / "calendar.yaml").write_bytes((repo_config / "calendar.yaml").read_bytes())
     (config_dir / "ca-resolutions.yaml").write_text("resolutions: []\n")
+    (config_dir / "liquidity.yaml").write_bytes((repo_config / "liquidity.yaml").read_bytes())
     s = Settings(data_dir=tmp_path / "data", config_dir=config_dir)
     store = RawStore(s)
     from datetime import datetime
@@ -138,13 +139,14 @@ class TestRebuildPublish:
         assert current_run_id(settings) == second.run_id
         assert Path(first.path).is_dir()  # old version remains, untouched
 
-    def test_all_five_tables_published_and_readable(self, settings: Settings) -> None:
+    def test_all_six_tables_published_and_readable(self, settings: Settings) -> None:
         curate_rebuild(ASOF, settings)
         for table, expected_rows in {
             "security": 2,  # ITEST + the CA-only ISIN never observed in prices... see below
             "trading_calendar": 3,
             "corporate_actions": 2,
             "prices_adj": 3,
+            "universe_membership": 3,  # ITEST is the only EQ candidate → one row per session
         }.items():
             frame = read_current(table, settings)
             if table == "security":
@@ -153,6 +155,11 @@ class TestRebuildPublish:
                 assert len(frame) == expected_rows, table
         listing = read_current("listing", settings)
         assert (listing["symbol"] == "ITEST").any()
+        # ITEST is cheap post-split (₹20/21) and thin — the universe surfaces it with reasons,
+        # never as a silent clean row (year-partitioned like prices_adj, read back through Arrow).
+        universe = read_current("universe_membership", settings)
+        assert set(universe["isin"]) == {ISIN}
+        assert (universe["excl_reasons"].map(len) > 0).all()
 
     def test_read_before_any_publish_fails_loudly(self, tmp_path: Path) -> None:
         with pytest.raises(ConfigError, match="no curated store published"):

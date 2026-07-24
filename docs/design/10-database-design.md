@@ -25,9 +25,9 @@ CREATE TABLE corporate_actions (isin TEXT, ex_date DATE, kind TEXT,             
   source_ref TEXT, available_at TIMESTAMP);                                     -- P0-10 conventions: split num/den=old/new face value; bonus num/den=X:Y;
                                                                                 -- rights num/den + cash=premium (always needs_review); dividend cash=Σ per-share;
                                                                                 -- available_at=ex_date (feed has no broadcast ts; P0-21 refines) — curate/corp_actions.py
-CREATE TABLE universe_membership (isin TEXT, d DATE, investable BOOL,
-  mdtv DECIMAL(18,2), amihud DOUBLE, zero_days_pct DOUBLE, surveillance TEXT,
-  excl_reasons TEXT[]);                                                         -- PIT universe: the only allowed universe source
+CREATE TABLE universe_membership (isin TEXT, d DATE, investable BOOL,             -- investable TRI-STATE (ADR-026): NULL=undetermined
+  mdtv DECIMAL(18,2), amihud DOUBLE, zero_days_pct DOUBLE, surveillance TEXT,     -- (clean but surveillance unchecked); surveillance='UNVERIFIED' until P0-14
+  excl_reasons TEXT[]);                                                         -- PIT universe: the only allowed universe source; materialised in-build + published, year-partitioned — curate/universe.py (P0-13)
 CREATE TABLE fundamentals_pit (isin TEXT, period_end DATE, statement TEXT,
   item TEXT, value DECIMAL(18,2), filed_at TIMESTAMP, available_at TIMESTAMP,
   source TEXT, confidence TEXT, revision_seq INT);                              -- confidence: native|bridged

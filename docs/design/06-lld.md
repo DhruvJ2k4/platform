@@ -18,7 +18,9 @@ epoch-versioned parsers) → security master resolution (ISIN; effective-dated s
 demerger/rights/other/amount-less dividend (cash-resolved, ADR-025) — → review queue**
 (ADR-023), the affected ISIN's PRE-EX window withheld
 until the operator resolves via config/ca-resolutions.yaml — post-ex rows are provably
-unaffected and publish (ADR-024)) → PIT universe build → events diff → validation gate
+unaffected and publish (ADR-024)) → PIT universe build (materialised + published as
+universe_membership, the 6th curated table; liquidity stats + all-reasons exclusions +
+tri-state investable — P0-13/ADR-026) → events diff → validation gate
 (schema + invariants; hard fail = no publish) → atomic publish (immutable
 data/curated/versions/<run_id>/ + CURRENT pointer swap, ADR-024).
 **Failure modes:** unparseable file (quarantine + alert; other sources proceed) ·

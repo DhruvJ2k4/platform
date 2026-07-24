@@ -54,16 +54,33 @@ byte-identical.
 `amihud = mean(|ret_d| / traded_value_d)` (skip zero-volume days) ·
 `ewma_var_t = λ·ewma_var_{t-1} + (1−λ)·ret_t²`, λ=0.94, seeded with 60d sample var;
 `vol = sqrt(252·ewma_var)`.
+Implemented by P0-13 (ADR-026): the 60-day window is `trading_calendar` SESSIONS on a per-ISIN
+grid reindexed onto the session axis (absent session = NaN, no forward-fill); `MDTV` is the
+median of RAW `traded_value` (level is adjustment-invariant); `zero_days_pct` counts absent OR
+zero-volume sessions; `amihud`'s `ret_d` uses the ADJUSTED factor path `close_unadj·adj_factor`
+(ADR-024 — raw-close returns spike ~50% at a split ex-date, poisoning amihud). `vol`/ewma is a
+FEATURE (§5), not a `universe_membership` column — out of P0-13's scope (P1-05).
 
 ## §4 PIT universe builder (pipeline; emit ALL exclusion reasons, not first)
 ```
 candidates = symbols with a price row on d resolving to an ISIN, exchange=NSE, series=='EQ'
-exclude if: price<₹20 | age<180 td | ff_mcap<floor (proxy: rank by MDTV until
-  fundamentals mature — flagged) | surveillance in {GSM*, ASM stage≥2} |
+exclude if: price<₹20 | age<180 td | ff_mcap<floor (proxy: ABSOLUTE MDTV floor until
+  fundamentals mature — flagged; ADR-026 supersedes the earlier "rank by MDTV" for PIT-safety) |
+  surveillance in {GSM*, ASM stage≥2} |
   zero_days_pct>5% | pending CA review (any corporate_actions row status=needs_review —
     demerger/rights/other — for the ISIN; generalized from "pending demerger" by ADR-023)
 investable(book) = position_value(book) ≤ p_max · MDTV      # evaluated at query time
 ```
+Amended by ADR-026 (P0-13): the universe is materialised in-build and published as
+`universe_membership` (partitioned by year, the only allowed source). `investable` is TRI-STATE
+— NULL when a name is clean on every RUN filter but surveillance is unchecked (the P0-14 seam;
+sentinel `surveillance="UNVERIFIED"`), never True over an unrun hard exclusion. `age` = trading
+sessions since the FIRST observed price row (never listing bounds, ADR-022). `pending CA review`
+is PIT-scoped per row d — fires iff a needs_review CA has `available_at ≤ d`, never the build
+asof (a future-ex-date review can't retroactively exclude a past date). `investable(book)` is
+DEFERRED (needs corpus + P1-06 sizing); the query surfaces `capacity = p_max·MDTV` instead.
+Delisting/suspension (`security.status`) and surveillance are tested seams, inert until
+populated (both P0-14 — P0-09's master leaves lifecycle fields NULL by design).
 Candidates line amended by ADR-022 (was "listings active on d"): listing answers identity
 only — NULL valid_from = open past and open-ended valid_to would leak future/dead listings
 into d's candidate set, and day-exact series occupancy (EQ vs BE vs parallel BL/T0) is a

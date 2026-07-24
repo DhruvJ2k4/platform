@@ -1,0 +1,19 @@
+# Liquidity + PIT-universe thresholds (doc 21 §3–4, P0-13). Consumed by curate/universe.py;
+# this file's config-hash joins the curated manifest identity (ADR-024), so any change here
+# mints a new immutable curated version. All values are validated strictly positive at load
+# (quant.config.LiquidityConfig) — a zero cannot silently disable a hard filter.
+window_trading_days: 60      # rolling liquidity window, in trading_calendar sessions (doc 21 §3)
+price_floor_rupees: 20       # exclude an unadjusted close below ₹20 (doc 21 §4)
+min_age_trading_days: 180    # seasoning: exclude fewer than 180 trading days since first observed
+                             # price row (age from price rows, never listing bounds — ADR-022)
+max_zero_days_pct: 0.05      # exclude a >5% zero-or-absent-day fraction over the window
+# ff-mcap floor PROXY: absolute median-daily-traded-value floor (₹1 crore). Doc 21 §4's literal
+# "rank by MDTV" is superseded by an absolute floor for PIT-safety (a cross-sectional rank's
+# cutoff depends on the day's whole composition, itself mutated by other filters) — ADR-026;
+# replaced by real free-float market cap when fundamentals mature (P1). Probe 2026-07-23:
+# leaves 1594 of 2657 EQ names on 2026-06-30, ample for N∈[12,30] + buffer at target corpus.
+mdtv_floor_rupees: 10000000
+# participation cap for query-time capacity = p_max·MDTV (doc 21 §4). The investable(book)
+# boolean overlay is deferred to P1/P2 (needs corpus + P1-06 sizing); refined with the P1-04
+# slippage/participation model.
+p_max: 0.01

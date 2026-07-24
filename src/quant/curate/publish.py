@@ -34,8 +34,18 @@ log = structlog.get_logger()
 _POINTER = "CURRENT"
 _MANIFEST = "manifest.json"
 _SHORTHASH_LEN = 8
-# Tables this publish owns (P0-11 scope); later tasks extend (universe P0-13, TRI P0-15…).
-PUBLISHED_TABLES = ("security", "listing", "trading_calendar", "corporate_actions", "prices_adj")
+# Tables this publish owns; later tasks extend (TRI P0-15…). universe_membership joined in P0-13.
+PUBLISHED_TABLES = (
+    "security",
+    "listing",
+    "trading_calendar",
+    "corporate_actions",
+    "prices_adj",
+    "universe_membership",
+)
+# Hive-partitioned by year, files sorted (isin, d) — doc 10 (prices_adj) generalised to the
+# universe so `universe --date` reads one year-partition with a d predicate (<1s, P0-13).
+_YEAR_PARTITIONED = frozenset({"prices_adj", "universe_membership"})
 
 
 @dataclass(frozen=True)
@@ -113,8 +123,8 @@ def publish(
 
 
 def _write_table(version_dir: Path, name: str, frame: pd.DataFrame) -> None:
-    """One table → parquet; prices_adj partitioned by year and sorted (isin, d) — doc 10."""
-    if name == "prices_adj":
+    """One table → parquet; year-partitioned tables sorted (isin, d) and split by year — doc 10."""
+    if name in _YEAR_PARTITIONED:
         frame = frame.sort_values(["isin", "d"], kind="stable").reset_index(drop=True)
         years = pd.Series([d.year for d in frame["d"]], index=frame.index)
         for year in sorted(years.unique()):
@@ -173,12 +183,17 @@ def current_run_id(settings: Settings | None = None) -> str:
     return pointer.read_text().strip()
 
 
+def version_dir(settings: Settings | None = None) -> Path:
+    """Absolute path of the CURRENT published version directory (public read accessor)."""
+    return _curated_root(settings) / "versions" / current_run_id(settings)
+
+
 def read_current(table: str, settings: Settings | None = None) -> pd.DataFrame:
     """Typed read of one published table from the CURRENT version (Arrow path, ADR-021)."""
     if table not in PUBLISHED_TABLES:
         raise ConfigError(f"unknown published table {table!r}; available: {list(PUBLISHED_TABLES)}")
     version_dir = _curated_root(settings) / "versions" / current_run_id(settings)
-    if table == "prices_adj":
+    if table in _YEAR_PARTITIONED:
         dataset = pq.ParquetDataset(version_dir / table)
         arrow = dataset.read()
         # hive partition column 'year' is derivational, not part of the doc-10 contract

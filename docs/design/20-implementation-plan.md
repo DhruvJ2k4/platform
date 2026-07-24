@@ -38,7 +38,7 @@ platform/
 | P0-10 | Corporate-actions ingester | 5y CA table populated; kinds classified; demergers → `needs_review` | 6h |
 | P0-11 | **CA adjuster** (algorithm 21§1) + golden + property tests + **atomic publish of curated tables** (doc 06 §6.2; persists the validated frames returned by P0-08/09/10) | Golden to the paisa; invariance property green; demerger blocks; calendar/master/CA/prices published atomically | 14h |
 | P0-12 | Dividend cash table (shipped as a derived surface over corporate_actions + operator cash resolutions — ADR-025; table promotion stays an open option) | Ex-date credits match CA source for sample | 2h |
-| P0-13 | Liquidity stats + PIT universe builder (21§3–4) | `universe --date` <1s with exclusion reasons; monotonicity green | 8h |
+| P0-13 | Liquidity stats + PIT universe builder (21§3–4; materialised in-build + published as the 6th curated table, tri-state `investable`, ff-mcap absolute-MDTV proxy — ADR-026; surveillance/delisting/relist-reset/investable(book) are tested-but-inert seams for P0-14/P1-06) | `universe --date` <1s with exclusion reasons; monotonicity green | 8h |
 | P0-14 | ASM/GSM surveillance ingester + hard-exclusion wiring | List-add flips investability next build (test) | 3h |
 | P0-15 | Index TRI ingester (benchmarks) | Nifty50+Midcap150 TRI series loaded, gap-checked | 3h |
 | P0-16 | DQ suite: gate + invariants + volumetrics | Injected bad file blocks publish + alerts | 6h |

@@ -256,6 +256,41 @@ def load_muhurat_dates(settings: Settings | None = None) -> frozenset[date]:
     return frozenset(dates)
 
 
+class LiquidityConfig(BaseModel):
+    """Liquidity + PIT-universe thresholds (doc 21 §3-4, P0-13); consumed by curate/universe.py.
+
+    Every bound is strictly positive so a parseable-but-wrong ``mdtv_floor_rupees: 0`` cannot
+    silently disable a hard filter and admit an uninvestable name (risk-manager guard). Not
+    effective-dated: universe hygiene is a single current policy, and the file's config-hash
+    joins the curated manifest identity so tuning a threshold mints a new immutable version.
+    ``mdtv_floor_rupees`` is the interim ff-mcap PROXY (doc 21 §4 "rank by MDTV" superseded by an
+    absolute floor for PIT-safety, ADR-026); ``p_max`` sizes the query-time capacity = p_max·MDTV
+    (the investable(book) overlay itself is deferred to P1/P2).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    window_trading_days: int = Field(gt=0)
+    price_floor_rupees: Decimal = Field(gt=0)
+    min_age_trading_days: int = Field(gt=0)
+    max_zero_days_pct: Decimal = Field(gt=0, le=1)
+    mdtv_floor_rupees: Decimal = Field(gt=0)
+    p_max: Decimal = Field(gt=0, le=1)
+
+
+def load_liquidity(settings: Settings | None = None) -> LiquidityConfig:
+    """Load config/liquidity.yaml; missing / malformed / out-of-range fails loudly (ConfigError)."""
+    s = settings or Settings()
+    path = s.config_dir / "liquidity.yaml"
+    data = load_yaml(path)
+    if not isinstance(data, dict):
+        raise ConfigError(f"invalid config {path}: expected a mapping of thresholds")
+    try:
+        return LiquidityConfig.model_validate(data)
+    except ValidationError as exc:
+        raise ConfigError(f"invalid config {path}: {exc}") from exc
+
+
 def load_costs(settings: Settings | None = None) -> RateSchedule[CostRates]:
     """Load config/costs.yaml as an effective-dated cost-rate schedule."""
     s = settings or Settings()

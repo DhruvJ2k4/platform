@@ -164,6 +164,85 @@ def curate(
         )
 
 
+@app.command()
+def universe(
+    date: str = typer.Option(..., "--date", help="decision date, ISO (YYYY-MM-DD)"),
+    book: str | None = typer.Option(
+        None, "--book", help="book name (capacity overlay deferred to P1/P2 — see banner)"
+    ),
+    json_out: bool = typer.Option(False, "--json", help="print the full per-name JSON"),
+) -> None:
+    """Print the PIT investable universe for a date with per-name exclusion reasons (doc 21 §4).
+
+    Reads the published universe_membership as-of the date (<1s). `investable` is tri-state:
+    true, false, or null (=undetermined: clean but surveillance unchecked until P0-14). `--book`
+    is accepted but the investable(book) overlay is deferred; a per-name capacity = p_max·MDTV is
+    shown as the honest raw material.
+    """
+    import pandas as pd
+
+    from quant.config import load_liquidity
+    from quant.curate.universe import load_universe
+
+    try:
+        d = _parse_iso(date, "--date")
+        frame = load_universe(d)
+        p_max = load_liquidity().p_max
+    except PlatformError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    out_of_coverage = len(frame) == 0
+    inv = frame["investable"]
+    n_true = int((inv == True).sum())  # noqa: E712 — Arrow bool; `is True` would miss it
+    n_false = int((inv == False).sum())  # noqa: E712
+    n_null = len(frame) - n_true - n_false
+    names = [
+        {
+            "isin": str(r.isin),
+            "investable": None if pd.isna(r.investable) else bool(r.investable),
+            "mdtv": None if pd.isna(r.mdtv) else str(r.mdtv),
+            "capacity_pmax_mdtv": None if pd.isna(r.mdtv) else str(p_max * r.mdtv),
+            "excl_reasons": list(r.excl_reasons),
+        }
+        for r in frame.itertuples(index=False)
+    ]
+    payload = {
+        "date": str(d),
+        "out_of_coverage": out_of_coverage,
+        "candidates": len(frame),
+        "investable": n_true,
+        "undetermined": n_null,
+        "excluded": n_false,
+        "names": names,
+    }
+    if book is not None:
+        typer.echo(
+            f"NOTE --book {book!r}: base universe only — investable(book) needs a corpus (P2) "
+            "and engine sizing (P1); capacity_pmax_mdtv is the query-time raw material, NOT a "
+            "book-investability verdict.",
+            err=True,
+        )
+    if json_out:
+        typer.echo(json.dumps(payload))
+        return
+    if out_of_coverage:
+        typer.echo(f"{d}: no candidates — out of coverage or a non-trading day (no universe rows)")
+        return
+    reason_hist: dict[str, int] = {}
+    for r in frame.itertuples(index=False):
+        for reason in r.excl_reasons:
+            reason_hist[reason] = reason_hist.get(reason, 0) + 1
+    typer.echo(
+        f"{d}: candidates={payload['candidates']} investable={n_true} "
+        f"undetermined={n_null} excluded={n_false}"
+    )
+    if n_null:
+        typer.echo("  (undetermined = clean but surveillance unchecked until P0-14 wires ASM/GSM)")
+    for reason, count in sorted(reason_hist.items(), key=lambda kv: (-kv[1], kv[0])):
+        typer.echo(f"  {reason}: {count}")
+
+
 def _ingest_corp_actions(
     date: str | None, since: str | None, until: str | None, weekends: bool
 ) -> corp_actions.IngestSummary:

@@ -20,7 +20,7 @@ import pandas as pd
 import structlog
 
 from quant import __version__
-from quant.config import Settings, load_ca_resolutions
+from quant.config import Settings, load_ca_resolutions, load_liquidity
 from quant.curate import corp_actions as ca_mod
 from quant.curate.adjust import adjust_prices
 from quant.curate.calendar import build_calendar
@@ -29,12 +29,13 @@ from quant.curate.parsers.bhavcopy import parse_bhavcopy
 from quant.curate.parsers.symbolchange import parse_symbolchange
 from quant.curate.prices import build_price_panel_frames
 from quant.curate.publish import PublishResult, publish
+from quant.curate.universe import build_universe
 from quant.errors import ContractViolation
 from quant.ingest import RawStore
 
 log = structlog.get_logger()
 
-_CONFIG_FILES = ("sources.yaml", "calendar.yaml", "ca-resolutions.yaml")
+_CONFIG_FILES = ("sources.yaml", "calendar.yaml", "ca-resolutions.yaml", "liquidity.yaml")
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,16 @@ def curate_rebuild(asof: date, settings: Settings | None = None) -> CurateReport
         asof=asof,
     )
 
+    # PIT universe build (doc 06 §6.2): liquidity stats + exclusions over the adjusted panel.
+    # Surveillance (P0-14) and delisting signals (security.status) are seams, inert until wired.
+    universe = build_universe(
+        adjusted.prices_adj,
+        ca.corporate_actions,
+        calendar,
+        master.security,
+        load_liquidity(s),
+    )
+
     manifest: dict[str, object] = {
         "asof": str(asof),
         "code_ref": _code_ref(),
@@ -104,6 +115,7 @@ def curate_rebuild(asof: date, settings: Settings | None = None) -> CurateReport
         "trading_calendar": calendar,
         "corporate_actions": ca.corporate_actions,
         "prices_adj": adjusted.prices_adj,
+        "universe_membership": universe.frame,
     }
     result: PublishResult = publish(tables, asof=asof, manifest=manifest, settings=s)
     report = CurateReport(
@@ -116,6 +128,7 @@ def curate_rebuild(asof: date, settings: Settings | None = None) -> CurateReport
             "corp_actions": {k: int(v) for k, v in ca.stats.items()},
             "price_panel": panel.stats,
             "adjust": adjusted.stats,
+            "universe": {k: int(v) for k, v in universe.stats.items()},
             "tables": {name: len(frame) for name, frame in tables.items()},
         },
     )

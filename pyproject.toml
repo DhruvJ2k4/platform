@@ -8,6 +8,7 @@ dependencies = [
     "duckdb>=1.5.4",
     "httpx>=0.28.1",
     "jinja2>=3.1.6",
+    "numpy>=2.0",  # already resolved via pandas/pyarrow; declared for curate/universe.py's direct use
     "pandas>=3.0.3",
     "pyarrow>=25.0.0",
     "pydantic>=2.13.4",

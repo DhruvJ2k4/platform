@@ -443,3 +443,58 @@
   red via the stale-key ConfigError doing its job. Fixed by making the fixture hermetic
   (tmp config with pinned calendar.yaml + empty resolutions; CLI test also sets
   PLATFORM_CONFIG_DIR): curated = f(raw, code, CONFIG) now holds for tests too.
+
+## 2026-07-23 — P0-13: liquidity stats + PIT universe builder (curate/universe.py)
+- Shipped: `universe_membership` is now materialised for the full published history INSIDE
+  `curate_rebuild` and published atomically as the 6th PUBLISHED_TABLES entry (year-partitioned,
+  sorted (isin,d)); new `curate/universe.py` (pure `build_universe` + fast as-of `load_universe`),
+  `config/liquidity.yaml` + `LiquidityConfig`, and a `universe --date [--book] [--json]` CLI.
+  This is the doc 06 §6.2 reading (universe is IN the build), NOT the P0-12 derived-surface
+  precedent — ADR-026. Live demo (real store curate-20260723-d48c383e): `universe --date
+  2026-06-30` = 2405 candidates / 1275 undetermined / 1130 excluded (ff_mcap 888 · age 297 ·
+  price 226 · zero_days 134 · pending_ca_review 128), 110 ms in-process (year-partition pruned);
+  conservation exact (810,619 false + 677,757 null = 1,488,376 candidates). Full-history rebuild
+  ~3m40s on the sample vault (incremental still deferred, ADR-024).
+- Three plan-review CRITICALs adopted BEFORE coding and red→green-proved after:
+  (risk) `investable` is TRI-STATE — a clean-but-surveillance-unchecked name is NULL, never True,
+  with sentinel `surveillance="UNVERIFIED"` (never assert a hard-exclusion check that never ran);
+  (quant) amihud's return uses the ADJUSTED factor path `close_unadj·adj_factor`, not raw close
+  (a split ex-date would inject a ~50% |ret| spike — returns are NOT adjustment-invariant, only
+  the ADR-024 factor path is); (PM) a mandatory PIT asof-invariance property, which the
+  per-(isin,d) `pending_ca_review` scoping (available_at ≤ d, never build asof) makes hold.
+- DOC-vs-REALITY encounters (each recorded, none a code weakening):
+  * `security.status` is 100% NULL on the real store — P0-09's master deliberately leaves the
+    lifecycle fields NULL (left-censored vault; status/delisting facts arrive with P0-14, per
+    master.py:613). So the §6 delisting exclusion ships as a TESTED HOOK reading security.status
+    (fires on a synthetic frame; inert in production until P0-14 populates it), not a live filter.
+    Relist-after-suspension age-reset deferred with it (needs a suspension signal); zero_days_pct
+    over the 60-session window is the interim guard for a name freshly back from suspension.
+  * The published vault is a SAMPLE, not a complete nightly ingest (sessions/year =
+    1/2022 · 124/2023 · 249/2024 · 249/2025 · 128/2026), so age/liquidity are measured in SAMPLED
+    sessions and `universe --date 2025-03-31` is legitimately out-of-coverage (not a bug — a
+    genuine non-sampled day; real sessions read correctly cross-year, e.g. 2023-07-03 → 1673 rows
+    in 21 ms). Economic interpretation of the exclusions awaits P0-19's dense backfill; the ff-mcap
+    absolute-MDTV proxy (₹1cr, flagged; supersedes §4's "rank by MDTV" for PIT-safety) leaves 1594
+    EQ names on 2026-06-30 — ample for N∈[12,30]+buffer (ADR-014).
+  * The `<1s` DoD is query latency (110 ms / 20 ms per date), not the ~1.0s cold `uv`+import
+    process start — the integration test asserts the in-process figure.
+- Carried: with surveillance unwired `investable_true=0` everywhere (honest, not yet actionable —
+  P0-14 flips it); P1-06 selection MUST treat investable NULL as not-selectable. The P0-12 carry
+  (ambiguous-dividend-group overlap with held/universe names) stays open — "held" needs the P2
+  ledger; the universe half is now computable ad hoc but is a P0-12 stat, not a P0-13 deliverable.
+- Property coverage: threshold-monotonicity (investable set shrinks / reasons grow) and PIT
+  asof-invariance (future sessions never change a past row) are hypothesis properties; the golden
+  4-name×7-session scenario pins exact MDTV/amihud/zero_days + exclusion sets.
+- Review (/review-domains): 3 of 9 seats completed before the org monthly spend limit terminated
+  the rest (P0-07 precedent) — arch-purity, money-auditor, contract-auditor all PASS. Findings
+  fixed in-pass: (1) numpy was imported directly but undeclared — added to pyproject.toml (already
+  resolved via pandas/pyarrow in uv.lock; declaration hygiene for a direct import, not a new
+  ADR-010 capability — flagged to operator); (2) NaN MDTV (traded_value null across the whole
+  window — a nullable-column data hole) would crash the DECIMAL write → now stores NULL and
+  ff_mcap-excludes conservatively, locked by a named unit test (money+contract, convergent);
+  (3) load_universe reached into publish's private _curated_root → added public version_dir();
+  (4) DOC FIX (docs-warden interim): security.status population is P0-14's job (per master.py:613),
+  not P0-09 as ADR-026/journal/doc-21 first said — corrected everywhere. The 6 spend-limit seats
+  (test/docs/risk/quant/execution/PM) reviewed the PLAN earlier; their interim signals showed the
+  suite green and the risk-CRITICAL tri-state + quant-CRITICAL amihud fixes present (both also
+  red→green-proved here). Self-review of those seats found nothing beyond the above.

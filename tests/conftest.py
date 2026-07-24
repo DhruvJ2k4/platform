@@ -18,7 +18,7 @@ import pandas as pd
 import pyarrow as pa
 from hypothesis import settings
 
-from quant.schemas import DATE, I32, I64, STR, TS, dec
+from quant.schemas import DATE, F64, I32, I64, STR, TS, dec
 
 settings.register_profile("ci", derandomize=True)
 settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "default"))
@@ -78,6 +78,83 @@ def ca_frame(
             "status": pa.array(status, STR),
             "source_ref": pa.array(ref, STR),
             "available_at": pa.array(avail, TS),
+        }
+    )
+    return table.to_pandas(types_mapper=pd.ArrowDtype)
+
+
+def prices_adj_frame(
+    rows: list[tuple[str, date, str, Decimal | None, int | None, Decimal | None, float]],
+) -> pd.DataFrame:
+    """doc-10 prices_adj frame from
+    (isin, d, series, close_unadj, volume, traded_value, adj_factor); o/h/l/c mirror the
+    adjusted close (close_unadj·adj_factor, paisa) so the universe suites drive liquidity math."""
+    isin, d, series, cu, vol, tv, af = (
+        (list(c) for c in zip(*rows, strict=True)) if rows else ([], [], [], [], [], [], [])
+    )
+    adj_c = [
+        None if c is None else (c * Decimal(str(f))).quantize(Decimal("0.01"))
+        for c, f in zip(cu, af, strict=True)
+    ]
+    table = pa.table(
+        {
+            "isin": pa.array(isin, STR),
+            "d": pa.array(d, DATE),
+            "exchange": pa.array(["NSE"] * len(isin), STR),
+            "series": pa.array(series, STR),
+            "o": pa.array(adj_c, dec(12, 2)),
+            "h": pa.array(adj_c, dec(12, 2)),
+            "l": pa.array(adj_c, dec(12, 2)),
+            "c": pa.array(adj_c, dec(12, 2)),
+            "close_unadj": pa.array(cu, dec(12, 2)),
+            "volume": pa.array(vol, I64),
+            "traded_value": pa.array(tv, dec(18, 2)),
+            "adj_factor": pa.array(af, F64),
+            "band_hit": pa.array([None] * len(isin), STR),
+        }
+    )
+    return table.to_pandas(types_mapper=pd.ArrowDtype)
+
+
+def calendar_frame(dates: list[date]) -> pd.DataFrame:
+    """doc-10 trading_calendar frame (all sessions 'normal') from a list of dates."""
+    table = pa.table(
+        {"d": pa.array(dates, DATE), "session": pa.array(["normal"] * len(dates), STR)}
+    )
+    return table.to_pandas(types_mapper=pd.ArrowDtype)
+
+
+def security_frame(
+    rows: list[tuple[str, str | None, str | None, date | None, date | None, Decimal | None]],
+) -> pd.DataFrame:
+    """doc-10 security frame from
+    (isin, name, status, first_listed, delisted_on, delist_terminal_price)."""
+    isin, name, status, fl, don, dtp = (
+        (list(c) for c in zip(*rows, strict=True)) if rows else ([], [], [], [], [], [])
+    )
+    table = pa.table(
+        {
+            "isin": pa.array(isin, STR),
+            "name": pa.array(name, STR),
+            "status": pa.array(status, STR),
+            "first_listed": pa.array(fl, DATE),
+            "delisted_on": pa.array(don, DATE),
+            "delist_terminal_price": pa.array(dtp, dec(12, 2)),
+        }
+    )
+    return table.to_pandas(types_mapper=pd.ArrowDtype)
+
+
+def surveillance_frame(rows: list[tuple[str, date, str, int]]) -> pd.DataFrame:
+    """P0-14 seam frame from (isin, available_at, category∈{GSM,ASM}, stage) — PIT-stamped."""
+    cols = (list(c) for c in zip(*rows, strict=True)) if rows else ([], [], [], [])
+    isin, avail, cat, stage = cols
+    table = pa.table(
+        {
+            "isin": pa.array(isin, STR),
+            "available_at": pa.array(avail, DATE),
+            "category": pa.array(cat, STR),
+            "stage": pa.array(stage, I32),
         }
     )
     return table.to_pandas(types_mapper=pd.ArrowDtype)
