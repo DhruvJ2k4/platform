@@ -498,3 +498,153 @@
   (test/docs/risk/quant/execution/PM) reviewed the PLAN earlier; their interim signals showed the
   suite green and the risk-CRITICAL tri-state + quant-CRITICAL amihud fixes present (both also
   red→green-proved here). Self-review of those seats found nothing beyond the above.
+
+## 2026-07-27 — P0-14: ASM/GSM surveillance ingester + hard-exclusion wiring (ADR-027)
+- Shipped: `curate/surveillance.py` (`build_surveillance` — CDC-diff over full ASM/GSM raw
+  snapshot history, decoupled coverage floor=max/ceiling=min), `curate/parsers/surveillance.py`
+  (structural parse_asm/parse_gsm), `ingest/surveillance.py` (fetch_asm/gsm_snapshot + the
+  columns-only-stub content gate), `curate/universe.py`'s `_surveillance_flags` redesigned to
+  per-(isin,category) independent tracking, `ingest asm`/`ingest gsm` CLI commands. 76 new tests
+  (parsers, stage classifiers, CDC-diff unit+property, PIT-invariance property, golden 4-snapshot
+  scenario, floor/ceiling asymmetry, ingest gate, integration) + 2 new + 1 fixed existing test.
+- Sourcing investigation (the bulk of this task's time — 3h estimate badly broken, flagged
+  upfront rather than absorbed): no verified NSE ASM/GSM endpoint existed anywhere in the docs.
+  Live probing (operator's residential IP, three rounds) found `asm.json`/`gsm.json`
+  (`nseindia.com/json/reports/{asm,gsm}.json`) return HTTP 200 to plain headers — no cookie-
+  priming needed, unlike corp_actions — but WITHOUT a full Akamai bot-challenge session (JS-
+  solved cookies `_abck`/`bm_sz`/`ak_bmsc`, normally only obtainable via browser JS execution) the
+  body is a byte-identical 674/747-byte STUB `{"columns":[...]}`, zero rows, no error — silently
+  "successful." Confirmed via TWO separate probes (cold, and with corp_actions-tier simple
+  priming) returning byte-identical stubs, ruling out a header-tuning fix. `bm_sz` expires in 4h
+  (`Max-Age=14400`), ruling out a one-time manual cookie drop for any unattended cadence. Decision
+  (operator-confirmed): ship the full pipeline fully tested against fixtures built from the
+  user's verified real-shape data; the ingest adapter is real (verified URL/headers) and
+  structurally rejects the stub with a loud `SourceError` rather than storing degraded data as
+  ground truth — forward-compatible, zero code changes needed once sourcing resolves by any means
+  (options recorded, none adopted: headless browser = new ADR-010-stack dependency needing
+  sign-off; operator cookie refresh = incompatible with the 4h expiry; alternate endpoint =
+  unexplored). Live-demoed on the REAL endpoint post-ship: `platform ingest asm/gsm --date
+  2026-07-27` both correctly exit 1 with the documented stub-rejection message — proving the
+  gate works against live NSE, not just fixture bytes.
+- The `gsmStage`-field trap: `gsmStage` LOOKS like the GSM stage (0-6) but is actually a
+  Roman-numeral encoding of an unrelated internal sequence number (e.g. `gsmStage:"LVIII"`=58=
+  the `(58)` at the end of `survCode:"IBC I & GSM 0 (58)"`). The real stage is only in free text
+  within `survDesc`/`survCode` — caught before any code was written against the wrong field,
+  verified against 5 real NSE samples (including compound "IBC I & GSM 0" forms).
+- Real correctness bug in the P0-13-shipped `_surveillance_flags`: it could only ACCUMULATE
+  exclusion evidence per isin (kept the latest MATCHING row), so a removed security would stay
+  excluded FOREVER — no mechanism existed to represent "no longer on the list." Fixed via CDC-diff
+  (snapshots are full lists, not event logs; consecutive snapshots diffed, emitting a row only on
+  change including an explicit `stage=-1` removal sentinel) + a per-(isin,category) independent
+  redesign of `_surveillance_flags` (a merged-per-isin tracker — my first draft — would let a GSM
+  removal wrongly clear a concurrently-active ASM exclusion; caught by PM/risk plan review,
+  confirmed via a dedicated test, red→green-proved post-ship).
+- A SECOND real bug, caught only during implementation (not the plan review): my first fix for
+  the reviewers' CRITICAL finding ("`frame=None` iff `coverage_floor is None`") was ITSELF wrong
+  — `coverage_floor` goes `None` whenever EITHER category is empty (not both), so that rule would
+  silently discard real exclusion rows from a category that HAD been sourced, the instant sourcing
+  becomes partial (e.g. ASM fixed before GSM). Caught by the PM's second review pass before any
+  code existed; fixed by fully decoupling exclusion-firing (always reads the frame, unconditional)
+  from the affirmative-True gate (floor/ceiling only). A THIRD bug surfaced by my own test suite
+  post-review: a defensive `assert floor <= ceiling` I added was itself wrong — floor>ceiling is a
+  legitimate state (the two categories' coverage windows don't overlap at all), not a builder bug;
+  caught by a dedicated asymmetric-coverage unit test (`test_floor_is_max_not_min_under_
+  asymmetric_coverage`) that no other test (including the PIT property test, which always
+  ingests both categories on synchronized dates) happened to exercise. Both assertions removed;
+  the degenerate case degrades safely (no date can satisfy the bound, so it stays undetermined
+  everywhere) with no explicit handling needed.
+- Open, documented limitation (not silently dropped): `coverage_ceiling` bounds trailing
+  staleness only — it does NOT close an intra-gap blind spot (a name entering AND exiting
+  surveillance entirely between two actually-ingested snapshots leaves zero CDC-diff evidence and
+  reads checked-clean throughout the gap). A fundamental property of point-in-time snapshot
+  ingestion, not solvable by this task. `stats["surveillance_gap_days_max"]` makes an anomalous
+  gap observable; P0-17's absence-of-data alarm work is the right place to alert on it once live
+  sourcing resumes.
+- Open, documented limitation, ESCALATED per risk-manager review: one live GSM sample's
+  `survDesc` read "ASM IBC Stage I and GSM Stage 0" — a possible independent ASM signal inside
+  GSM free text, unverified whether it also appears in `asm.json` for that security. Scoped the
+  ASM hard-exclusion to `asm.json` only (never mined out of GSM text) but `stats["gsm_survdesc_
+  mentions_asm_ibc"]` is surfaced as a build-report WARN (an operator-review trigger, mirroring
+  `needs_review` CA handling) rather than a buried counter nobody is required to check — a stats
+  key alone is not a control for a hard-exclusion-primacy signal.
+- Scope correction, confirmed with the operator: `security.status` (delisted/suspended) is OUT of
+  P0-14 — a separate, still-unsourced item (doc 09 has no NSE source for it; ASM/GSM don't carry
+  it). Corrected five stale "P0-14 owns delisting too" references across `master.py`, `curate/
+  universe.py`, doc 21 §4, doc 13 F3, doc 20's P0-13 row, and ADR-026 (via a repo-wide `grep -rn
+  "P0-14"` sweep, not a hand-picked file list — caught `universe.py`'s own docstrings, which a
+  fixed list would have missed). Added an explicit backlog stub to doc 20 (unscheduled — needs
+  its own sourcing spike before a task ID exists) so the doc-21-§4-mandated exclusion doesn't
+  quietly disappear from institutional memory now that the false ownership pointer is gone.
+  SELF-CONSISTENCY NOTE: the P0-13 journal entry (2026-07-23) explicitly asserted "security.status
+  population is P0-14's job… corrected everywhere" on the SAME doc-09 evidence (no delisting
+  source listed) this task now re-examines and reverses. That earlier correction was itself wrong
+  — it should have asked "does doc 09 list a source for THIS" rather than just "which task claims
+  ownership," and doc 09 has never listed one. Recorded so two contradicting corrections inside
+  five days reads as diligence catching its own prior miss, not carelessness.
+- Forward-looking note for P0-17 (not yet shipped, so not live yet): once `asm`/`gsm` are
+  registered sources in `config/sources.yaml`, P0-17's nightly automation will attempt them every
+  night and hit the loud `SourceError` indefinitely until sourcing resolves — needs an allow-list
+  or expected-failure classification when that task lands, so the gap isn't rediscovered as an
+  incident.
+- Real-vault verification (`curate-20260727-254e34b3`, live rebuild ~3m37s, matching the P0-13
+  baseline — no meaningful perf regression from the no-op surveillance step): zero asm/gsm raw
+  artifacts exist (both live ingest attempts correctly refused to store the stub), and the
+  rebuild's `investable_true=0 / investable_false=810619 / investable_null=677757` on 1,488,376
+  universe rows is an EXACT match to the P0-13-recorded baseline — proving the real-vault no-op
+  claim on production data, not just synthetic fixtures. `platform universe --date` output
+  reworded to name the real blocker instead of the now-stale "unchecked until P0-14."
+- Review (`/review-domains`): two rounds of PM + risk-manager PLAN review (before any code) found
+  1 CRITICAL (the frame/floor contradiction, both reviewers independently), 1 sharp WARN (the
+  intra-gap staleness blind spot, risk-manager), plus the per-category-independence gap, the
+  IBC-escalation call, and the doc-sweep/backlog/journal-consistency items (PM) — all folded in
+  before implementation began. Full `/review-domains` on the DIFF deferred to this ship pass
+  (see below) given the plan-level review was unusually thorough for this task.
+- `/review-domains` on the DIFF: 8 of 9 seats completed (docs-warden stalled after 600s —
+  P0-07/P0-13-precedent resource limit; covered by self-check below + the other 8 seats'
+  incidental doc-consistency checks, notably the PM's independent doc-propagation verification).
+  Money-auditor and portfolio-manager: PASS, 0 findings each. 9 findings total across the other
+  6 seats, ALL fixed in-pass (0 left open):
+  * [arch-purity WARN] doc 06 §6.1's "raw is stored regardless of parseability" was never
+    amended for the new ingest-layer content gate — fixed: §6.1 now documents the existing
+    fetch-validity-pre-filter pattern (symbolchange/corp_actions already reject HTML block pages
+    before storage; this is the same category, just for a subtler failure mode) as the carve-out
+    it always implicitly was.
+  * [arch-purity NOTE] `ingest/surveillance.py`'s "byte-sniff only, never parse" framing was
+    inaccurate (`json.loads` is a real, if narrow, parse) — fixed: reworded to justify the
+    ingest-side duplication explicitly (immediate operator signal + avoids accumulating
+    unbounded byte-identical stub files while the blocker persists) rather than claiming it's a
+    byte-sniff.
+  * [contract-auditor WARN] `universe.py`'s `_REMOVED_STAGE = -1` duplicated `surveillance.py`'s
+    `REMOVED = -1` as an independent literal tied only by a comment, no shared source of truth —
+    fixed: now `from quant.curate.surveillance import REMOVED as _REMOVED_STAGE` (verified no
+    circular import — `build.py` already imports both modules independently).
+  * [test-warden WARN] the PIT-invariance property test's `max_examples=20` was a real reduction
+    from hypothesis's default 100 on a CLAUDE.md-mandated PIT property — fixed: bumped to 50 with
+    an explicit justification comment (small bounded state space, ~13s wall time).
+  * [quant-researcher NOTE ×2] (1) the parsed-but-unused `snapshot_date` field was a latent
+    look-ahead trap for a future editor who might wire it into `available_at` instead of
+    `artifact.logical_date` — fixed: an explicit guard comment at the exact assignment point +
+    a new regression test (`test_available_at_is_ingestion_day_never_the_payloads_self_reported_
+    date`) with a deliberately absurd payload-claimed date, proving the builder ignores it.
+    (2) no test threaded an unparseable GSM row through the full `build_universe` composition,
+    only the classifier and `_excludes` in isolation — fixed: `test_surveillance_unparseable_
+    gsm_stage_still_excludes_end_to_end`.
+  * [risk-manager WARN] the GSM/IBC escalation (my own prior ask) was a real `log.warning` but
+    never reached `curate --rebuild`'s human-readable summary — only `--json` or incidental
+    log-stream visibility — fixed: both WARN counters (and the new staleness one, below) now
+    print in the default CLI summary whenever nonzero, mirroring `universe --date`'s existing
+    `undetermined`-count surfacing.
+  * [execution-trader WARN ×2] (1) no test exercised "price data exists past the last ASM/GSM
+    snapshot" — every existing fixture kept the coverage ceiling in lockstep with price dates —
+    fixed: `test_price_date_past_surveillance_ceiling_stays_undetermined` (a clean name whose
+    price history outruns the ceiling correctly degrades to NULL, never wrongly True).
+    (2) `surveillance_gap_days_max` only catches a gap BETWEEN two ingested snapshots — if
+    ingestion stops entirely and never resumes, that stat freezes silently while every later
+    rebuild's asof drifts further past `coverage_ceiling` with no new signal — fixed: a new
+    `surveillance_days_since_ceiling` stat + `log.warning("surveillance_ceiling_stale", ...)`
+    when `(asof - coverage_ceiling).days > 14`, surfaced in both `--json` and the CLI summary.
+    `investable` was already safe either way (this closes an observability gap, not a
+    correctness one) — but a live-dark ingestion pipeline now gets its own signal today rather
+    than waiting on unscheduled P0-17.
+  Final state: 419 tests pass (up from 340 pre-P0-14), ruff/format/mypy-strict/lint-imports all
+  clean, `days_since_ceiling` staleness logic smoke-tested in isolation post-fix.

@@ -25,12 +25,16 @@ parameter, not baked in). Edge: relist after suspension (age reset); symbol chan
 mid-window. Accept: `universe --date 2016-03-31` returns in <1s with exclusion reasons
 per name; monotonicity invariants green.
 Delivered by P0-13/ADR-026: age from observed price rows (never listing bounds, ADR-022) and
-ff-mcap floor as an absolute MDTV proxy; `investable` is tri-state (NULL until the surveillance
-input exists); the book-corpus investability + relist-reset are DEFERRED (surveillance and
-delisting are tested-but-inert seams — P0-14; relist-reset needs a suspension signal). The
-`2016-03-31` example is moot under the ~2021 CA-coverage floor (ADR-024) until P0-19's dense
-backfill; the demonstrated date is 2026-06-30 (110 ms). "monotonicity green" = the threshold
-leg; the book-corpus leg ships with the deferred query-time overlay.
+ff-mcap floor as an absolute MDTV proxy; `investable` is tri-state. Delivered by P0-14/ADR-027:
+surveillance hard-exclusions wired for real (ASM/GSM CDC-diff over full raw snapshot history);
+live sourcing is blocked (NSE's endpoints need a session no plain client can obtain — journal
+2026-07-27), so the real vault still reads undetermined everywhere pending a future sourcing
+resolution. The book-corpus investability + relist-reset stay DEFERRED (delisting/suspension has
+no identified NSE source at all — a separate, still-unsourced item, doc 20 backlog; relist-reset
+needs a suspension signal once that source exists). The `2016-03-31` example is moot under the
+~2021 CA-coverage floor (ADR-024) until P0-19's dense backfill; the demonstrated date is
+2026-06-30 (110 ms). "monotonicity green" = the threshold leg; the book-corpus leg ships with
+the deferred query-time overlay.
 
 ## F4 PIT fundamentals collector (P1, collect-early)
 In: filings portal. Out: raw XBRL/CSV + `fundamentals_pit` rows with `filed_at`. Edge:

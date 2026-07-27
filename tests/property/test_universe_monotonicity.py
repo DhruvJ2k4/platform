@@ -4,8 +4,9 @@ Tightening every liquidity threshold uniformly can only SHRINK the investable se
 name's reason list — never the reverse. The stats (MDTV/age/zero_days) are identical across the
 two configs (same panel, same window), so the only moving part is the thresholds, and each
 threshold reason is individually monotone. The book-corpus monotonicity leg ships with the
-deferred investable(book) overlay (ADR-026). Surveillance is checked (empty frame) so investable
-is a genuine bool here, not the undetermined NULL.
+deferred investable(book) overlay (ADR-026). Surveillance is checked (empty frame, WITH an
+explicit floor/ceiling bounding every DAYS — P0-14: floor/ceiling, not frame presence alone,
+gate the affirmative path) so investable is a genuine bool here, not the undetermined NULL.
 """
 
 from datetime import date, timedelta
@@ -60,12 +61,17 @@ def test_tightening_thresholds_shrinks_investable_and_grows_reasons(
     rows = _rows(cells)
     sec = security_frame([(i, i, None, None, None, None) for i in ISINS])
     surv = surveillance_frame([])  # checked-but-empty → investable is a real bool
+    surv_kwargs = {
+        "surveillance": surv,
+        "surveillance_coverage_floor": DAYS[0],
+        "surveillance_coverage_ceiling": DAYS[-1],
+    }
     args = (ca_frame([]), calendar_frame(DAYS), sec)
     # A = the looser config; B = uniformly at-least-as-strict on every threshold.
     a = _cfg(min(price), min(age), min(mdtv), max(zero))
     b = _cfg(max(price), max(age), max(mdtv), min(zero))
-    fa = build_universe(prices_adj_frame(rows), *args, a, surveillance=surv).frame
-    fb = build_universe(prices_adj_frame(rows), *args, b, surveillance=surv).frame
+    fa = build_universe(prices_adj_frame(rows), *args, a, **surv_kwargs).frame
+    fb = build_universe(prices_adj_frame(rows), *args, b, **surv_kwargs).frame
 
     ra = {(r.isin, r.d): (set(r.excl_reasons), r.investable) for r in fa.itertuples()}
     rb = {(r.isin, r.d): (set(r.excl_reasons), r.investable) for r in fb.itertuples()}

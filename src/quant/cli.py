@@ -10,14 +10,16 @@ labelling the fetch) and reject range/weekend flags with ConfigError.
 
 import datetime
 import json
+from collections.abc import Callable
 
 import httpx
 import typer
 
 from quant import __version__
-from quant.config import Settings, source_spec
+from quant.config import Settings, SourceSpec, source_spec
 from quant.errors import ConfigError, PlatformError
-from quant.ingest import RawStore, bhavcopy, corp_actions, symbolchange
+from quant.ingest import RawArtifact, RawStore, bhavcopy, corp_actions, symbolchange
+from quant.ingest import surveillance as surveillance_ingest
 
 app = typer.Typer(name="platform")
 
@@ -64,11 +66,19 @@ def ingest(
             summary = _ingest_symbolchange(date, since, until, weekends)
         elif source == corp_actions.SOURCE:
             summary = _ingest_corp_actions(date, since, until, weekends)
+        elif source == surveillance_ingest.SOURCE_ASM:
+            summary = _ingest_asm(date, since, until, weekends)
+        elif source == surveillance_ingest.SOURCE_GSM:
+            summary = _ingest_gsm(date, since, until, weekends)
         else:
-            raise ConfigError(
-                f"no adapter for source {source!r}; available: "
-                f"{[bhavcopy.SOURCE, symbolchange.SOURCE, corp_actions.SOURCE]}"
-            )
+            known = [
+                bhavcopy.SOURCE,
+                symbolchange.SOURCE,
+                corp_actions.SOURCE,
+                surveillance_ingest.SOURCE_ASM,
+                surveillance_ingest.SOURCE_GSM,
+            ]
+            raise ConfigError(f"no adapter for source {source!r}; available: {known}")
     except PlatformError as exc:
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -130,6 +140,51 @@ def _ingest_symbolchange(
     )
 
 
+def _ingest_asm(
+    date: str | None, since: str | None, until: str | None, weekends: bool
+) -> surveillance_ingest.SnapshotSummary:
+    """Snapshot source (P0-14): --date optionally labels the fetch day; range flags meaningless."""
+    return _ingest_surveillance_snapshot(
+        surveillance_ingest.SOURCE_ASM, surveillance_ingest.fetch_asm_snapshot,
+        date, since, until, weekends,
+    )  # fmt: skip
+
+
+def _ingest_gsm(
+    date: str | None, since: str | None, until: str | None, weekends: bool
+) -> surveillance_ingest.SnapshotSummary:
+    """Snapshot source (P0-14): --date optionally labels the fetch day; range flags meaningless."""
+    return _ingest_surveillance_snapshot(
+        surveillance_ingest.SOURCE_GSM, surveillance_ingest.fetch_gsm_snapshot,
+        date, since, until, weekends,
+    )  # fmt: skip
+
+
+_SurveillanceFetch = Callable[..., tuple[RawArtifact, bool]]
+
+
+def _ingest_surveillance_snapshot(
+    source: str,
+    fetch: _SurveillanceFetch,
+    date: str | None,
+    since: str | None,
+    until: str | None,
+    weekends: bool,
+) -> surveillance_ingest.SnapshotSummary:
+    if since is not None or until is not None or weekends:
+        raise ConfigError(
+            f"{source} is a snapshot source: use only --date (optional; defaults to today)"
+        )
+    d = _parse_iso(date, "--date") if date is not None else datetime.date.today()
+    spec: SourceSpec = source_spec(source)
+    store = RawStore(Settings())
+    with _make_client() as client:
+        artifact, created = fetch(d, store=store, spec=spec, client=client)
+    return surveillance_ingest.SnapshotSummary(
+        source, str(artifact.logical_date), created, artifact.sha256
+    )
+
+
 @app.command()
 def curate(
     rebuild: bool = typer.Option(False, "--rebuild", help="full deterministic rebuild + publish"),
@@ -162,6 +217,23 @@ def curate(
             f"{report.run_id}: {'published' if report.created else 'no-op (identical)'} "
             f"asof={report.asof} rows={report.stats['tables']}"
         )
+        # Surfaced here too (not just --json / the log stream) so an operator reading only the
+        # terse summary line still sees an operator-review-trigger signal (risk-manager +
+        # execution-trader review, P0-14): a possible independent ASM signal inside GSM text, an
+        # internal gap between two ingested snapshots wide enough to hide a full add-then-remove
+        # cycle, or ingestion having gone dark entirely relative to THIS build's asof.
+        surv_stats = report.stats.get("surveillance", {})
+        ibc = surv_stats.get("gsm_survdesc_mentions_asm_ibc", 0)
+        gap = surv_stats.get("surveillance_gap_days_max", 0)
+        stale = surv_stats.get("surveillance_days_since_ceiling", -1)
+        if ibc:
+            typer.echo(f"  WARN surveillance_gsm_asm_ibc_signal: {ibc} (operator review)", err=True)
+        if gap > 14:
+            typer.echo(f"  WARN surveillance_ingestion_gap: {gap} days", err=True)
+        if stale > 14:
+            typer.echo(
+                f"  WARN surveillance_ceiling_stale: {stale} days since last snapshot", err=True
+            )
 
 
 @app.command()
@@ -175,9 +247,11 @@ def universe(
     """Print the PIT investable universe for a date with per-name exclusion reasons (doc 21 §4).
 
     Reads the published universe_membership as-of the date (<1s). `investable` is tri-state:
-    true, false, or null (=undetermined: clean but surveillance unchecked until P0-14). `--book`
-    is accepted but the investable(book) overlay is deferred; a per-name capacity = p_max·MDTV is
-    shown as the honest raw material.
+    true, false, or null (=undetermined: clean but surveillance coverage doesn't bound this date
+    — either ASM/GSM ingest is blocked on session sourcing, see ops/journal.md, or the date
+    predates/postdates the ingested snapshot window). `--book` is accepted but the
+    investable(book) overlay is deferred; a per-name capacity = p_max·MDTV is shown as the
+    honest raw material.
     """
     import pandas as pd
 
@@ -238,7 +312,10 @@ def universe(
         f"undetermined={n_null} excluded={n_false}"
     )
     if n_null:
-        typer.echo("  (undetermined = clean but surveillance unchecked until P0-14 wires ASM/GSM)")
+        typer.echo(
+            "  (undetermined = clean but surveillance coverage doesn't bound this date -- "
+            "ASM/GSM ingest blocked on session sourcing, see ops/journal.md)"
+        )
     for reason, count in sorted(reason_hist.items(), key=lambda kv: (-kv[1], kv[0])):
         typer.echo(f"  {reason}: {count}")
 

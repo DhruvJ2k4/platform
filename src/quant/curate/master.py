@@ -610,9 +610,10 @@ def _synthetic_yields(
 def _emit_security(obs: pd.DataFrame) -> pd.DataFrame:
     """One row per ISIN; name = latest observed UDiFF instrument name (display-only, ADR-022).
 
-    Lifecycle fields stay NULL: the vault is left-censored and delisting/status facts arrive
-    with later surveillance work (P0-14), not P0-10 (corporate actions) — writing "active" or
-    first-seen dates would be guessed facts.
+    Lifecycle fields stay NULL: the vault is left-censored and delisting/status facts have no
+    identified NSE source yet — a separate, still-unsourced item (doc 09 gap; P0-14 wired
+    ASM/GSM surveillance, which does NOT carry delisting facts) — not P0-10 (corporate actions).
+    Writing "active" or first-seen dates would be guessed facts.
     """
     named = obs[obs["security_name"].notna()]
     latest_name: dict[str, str] = {}

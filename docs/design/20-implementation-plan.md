@@ -38,8 +38,8 @@ platform/
 | P0-10 | Corporate-actions ingester | 5y CA table populated; kinds classified; demergers → `needs_review` | 6h |
 | P0-11 | **CA adjuster** (algorithm 21§1) + golden + property tests + **atomic publish of curated tables** (doc 06 §6.2; persists the validated frames returned by P0-08/09/10) | Golden to the paisa; invariance property green; demerger blocks; calendar/master/CA/prices published atomically | 14h |
 | P0-12 | Dividend cash table (shipped as a derived surface over corporate_actions + operator cash resolutions — ADR-025; table promotion stays an open option) | Ex-date credits match CA source for sample | 2h |
-| P0-13 | Liquidity stats + PIT universe builder (21§3–4; materialised in-build + published as the 6th curated table, tri-state `investable`, ff-mcap absolute-MDTV proxy — ADR-026; surveillance/delisting/relist-reset/investable(book) are tested-but-inert seams for P0-14/P1-06) | `universe --date` <1s with exclusion reasons; monotonicity green | 8h |
-| P0-14 | ASM/GSM surveillance ingester + hard-exclusion wiring | List-add flips investability next build (test) | 3h |
+| P0-13 | Liquidity stats + PIT universe builder (21§3–4; materialised in-build + published as the 6th curated table, tri-state `investable`, ff-mcap absolute-MDTV proxy — ADR-026; surveillance/relist-reset/investable(book) are tested-but-inert seams for P0-14/P1-06; delisting/`security.status` has NO identified NSE source — a separate open item, backlog note below, not scheduled to any task) | `universe --date` <1s with exclusion reasons; monotonicity green | 8h |
+| P0-14 | ASM/GSM surveillance ingester + hard-exclusion wiring (21§4, ADR-027; CDC-diff over full raw snapshot history so list-*removal* correctly un-excludes, not just list-add; decoupled floor/ceiling gate the affirmative True path only, never exclusion-firing, so partial ASM/GSM sourcing stays safe; live sourcing blocked — NSE's endpoints need a full Akamai bot-challenge session no plain client can obtain, journal 2026-07-27 — mechanism ships fully tested against verified-real-shape fixtures, real vault stays a proven no-op) | List-add flips investability next build (test) | 3h |
 | P0-15 | Index TRI ingester (benchmarks) | Nifty50+Midcap150 TRI series loaded, gap-checked | 3h |
 | P0-16 | DQ suite: gate + invariants + volumetrics | Injected bad file blocks publish + alerts | 6h |
 | P0-17 | Dead-man switch + Telegram + status page v0 | Killed cron detected externally <24h (drill) | 4h |
@@ -47,6 +47,15 @@ platform/
 | P0-19 | 15y backfill run + **amended validation** (21§14) | Two-part validation passes; report archived | 8h |
 | P0-20 | Fault drills ×3 (dead cron, corrupt file, missed week) | Each detected+healed as designed; logged | 3h |
 | P0-21 | Filings/announcements PIT collector v0 (collect-early) | Results-day filing lands with broadcast ts; absence-alarm tested | 10h |
+
+**Backlog, unscheduled (Phase 0 gap surfaced P0-14, 2026-07-27):** delisting/suspension
+(`security.status`, doc 21 §4's fourth hard-exclusion category alongside price/age/mdtv-proxy/
+surveillance) has **no identified NSE source at all** — doc 09's source table has no row for it,
+and ASM/GSM (P0-14) don't carry it (a delisted company need not ever appear on a surveillance
+list). `curate/master.py`/`curate/universe.py` ship a tested-but-inert hook reading
+`security.status`, which P0-09 leaves permanently NULL. Needs its own P0-05-style sourcing spike
+before a task ID can be assigned — revisit when a candidate source is found (or accept the gap
+and document the residual risk window explicitly if none exists).
 
 ## Phase 1 — Research engine + Milestone 1 (≈ 85–115 h)
 | ID | Task | DoD | Est |

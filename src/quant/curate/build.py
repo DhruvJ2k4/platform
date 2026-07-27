@@ -3,7 +3,9 @@
 `curate_rebuild(asof)` executes the doc-06 workflow in order — parse (once; the vault is read
 in a single pass and the frames are shared by every consumer) → security-master resolution →
 trading calendar → corporate actions (+ operator resolutions from config) → raw price panel →
-CA adjustment (pre-ex blocking, coverage floor/ceiling) → validation gate → atomic publish.
+CA adjustment (pre-ex blocking, coverage floor/ceiling) → surveillance event build (P0-14; full
+ASM/GSM raw history → PIT frame + coverage bounds) → PIT universe build → validation gate →
+atomic publish.
 The build is a deterministic function of (raw vault, code, config, asof): the manifest digests
 exactly that identity, so rebuilding unchanged inputs re-derives the same run_id and the
 publish is a verified no-op. Any gate breach raises (publish blocked — stale-but-consistent
@@ -29,6 +31,7 @@ from quant.curate.parsers.bhavcopy import parse_bhavcopy
 from quant.curate.parsers.symbolchange import parse_symbolchange
 from quant.curate.prices import build_price_panel_frames
 from quant.curate.publish import PublishResult, publish
+from quant.curate.surveillance import build_surveillance
 from quant.curate.universe import build_universe
 from quant.errors import ContractViolation
 from quant.ingest import RawStore
@@ -92,14 +95,51 @@ def curate_rebuild(asof: date, settings: Settings | None = None) -> CurateReport
         asof=asof,
     )
 
+    # Surveillance (P0-14): full-history ASM/GSM event frame + coverage bounds. `surv.frame` is
+    # always a real (possibly empty) DataFrame and floor/ceiling are None together whenever
+    # either category has zero raw snapshots ever — passed through UNCONDITIONALLY (no special-
+    # casing needed): on the real vault today this is a strict no-op vs. surveillance=None,
+    # because build_universe's floor/ceiling gate only the affirmative path (curate/universe.py).
+    surv = build_surveillance(s)
+    if surv.stats["surveillance_gap_days_max"] > 14:
+        log.warning(
+            "surveillance_ingestion_gap",
+            gap_days=surv.stats["surveillance_gap_days_max"],
+            note="intra-gap blind spot — see curate/surveillance.py module docstring",
+        )
+    if surv.stats["gsm_survdesc_mentions_asm_ibc"] > 0:
+        log.warning(
+            "surveillance_gsm_asm_ibc_signal",
+            count=surv.stats["gsm_survdesc_mentions_asm_ibc"],
+            note="possible ASM signal inside GSM text, not mined for exclusion — operator review",
+        )
+    # Staleness relative to THIS build (execution-trader review): surveillance_gap_days_max only
+    # catches a gap BETWEEN two ingested snapshots — if ingestion stops entirely and never
+    # resumes, that stat freezes and stays silent while every later rebuild's asof drifts further
+    # past coverage_ceiling. investable already degrades safely either way (bounded=False once
+    # d>ceiling — curate/universe.py), but a live-dark ingestion pipeline deserves its own signal
+    # now rather than waiting on unscheduled P0-17 absence-of-data alarm work.
+    days_since_ceiling = (asof - surv.coverage_ceiling).days if surv.coverage_ceiling else -1
+    surv.stats["surveillance_days_since_ceiling"] = days_since_ceiling  # -1 = no ceiling yet
+    if days_since_ceiling > 14:
+        log.warning(
+            "surveillance_ceiling_stale",
+            days_since_ceiling=days_since_ceiling,
+            coverage_ceiling=str(surv.coverage_ceiling),
+            note="no ASM/GSM snapshot ingested in >14d relative to this build's asof",
+        )
+
     # PIT universe build (doc 06 §6.2): liquidity stats + exclusions over the adjusted panel.
-    # Surveillance (P0-14) and delisting signals (security.status) are seams, inert until wired.
+    # Delisting signals (security.status) stay a tested-but-inert hook — no NSE source identified.
     universe = build_universe(
         adjusted.prices_adj,
         ca.corporate_actions,
         calendar,
         master.security,
         load_liquidity(s),
+        surveillance=surv.frame,
+        surveillance_coverage_floor=surv.coverage_floor,
+        surveillance_coverage_ceiling=surv.coverage_ceiling,
     )
 
     manifest: dict[str, object] = {
@@ -107,7 +147,12 @@ def curate_rebuild(asof: date, settings: Settings | None = None) -> CurateReport
         "code_ref": _code_ref(),
         "config_hashes": _config_hashes(s),
         "raw_watermarks": _raw_watermarks(store),
-        "coverage": {"floor": str(ca.coverage_floor), "ceiling": str(ca.coverage_ceiling)},
+        "coverage": {
+            "floor": str(ca.coverage_floor),
+            "ceiling": str(ca.coverage_ceiling),
+            "surveillance_floor": str(surv.coverage_floor) if surv.coverage_floor else None,
+            "surveillance_ceiling": str(surv.coverage_ceiling) if surv.coverage_ceiling else None,
+        },
     }
     tables = {
         "security": master.security,
@@ -128,6 +173,7 @@ def curate_rebuild(asof: date, settings: Settings | None = None) -> CurateReport
             "corp_actions": {k: int(v) for k, v in ca.stats.items()},
             "price_panel": panel.stats,
             "adjust": adjusted.stats,
+            "surveillance": {k: int(v) for k, v in surv.stats.items()},
             "universe": {k: int(v) for k, v in universe.stats.items()},
             "tables": {name: len(frame) for name, frame in tables.items()},
         },
@@ -167,7 +213,7 @@ def _config_hashes(settings: Settings) -> dict[str, str]:
 
 def _raw_watermarks(store: RawStore) -> dict[str, dict[str, str]]:
     marks: dict[str, dict[str, str]] = {}
-    for source in ("bhavcopy", "symbolchange", "corp_actions"):
+    for source in ("bhavcopy", "symbolchange", "corp_actions", "asm", "gsm"):
         artifacts = store.latest_per_date(source)
         if artifacts:
             marks[source] = {

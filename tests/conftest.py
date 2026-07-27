@@ -10,6 +10,7 @@ corporate_actions frames for the adjuster suites (golden/unit/property share the
 directory joins sys.path).
 """
 
+import json
 import os
 from datetime import date, datetime
 from decimal import Decimal
@@ -158,3 +159,57 @@ def surveillance_frame(rows: list[tuple[str, date, str, int]]) -> pd.DataFrame:
         }
     )
     return table.to_pandas(types_mapper=pd.ArrowDtype)
+
+
+def asm_snapshot_bytes(
+    entries: list[tuple[str, str, str, str]], groups: tuple[str, ...] = ("longterm",)
+) -> bytes:
+    """Raw asm.json bytes from (isin, symbol, company_name, asmSurvIndicator) rows.
+
+    All entries land in the first named group (default 'longterm'); pass a longer `groups`
+    tuple to also emit trailing EMPTY groups (proves the generic non-'columns'-key iteration
+    handles an unconfirmed 'shortterm' key without hardcoding it, P0-14).
+    """
+    rows = [
+        {
+            "asmSurvIndicator": stage_text,
+            "asmTime": "01-Jan-2026",
+            "companyName": name,
+            "isin": isin,
+            "series": None,
+            "survCode": "x",
+            "survDesc": "x",
+            "symbol": sym,
+            "srno": i,
+        }
+        for i, (isin, sym, name, stage_text) in enumerate(entries, start=1)
+    ]
+    payload: dict[str, object] = {"columns": []}
+    for i, g in enumerate(groups):
+        payload[g] = {"data": rows if i == 0 else []}
+    return json.dumps(payload).encode()
+
+
+def gsm_snapshot_bytes(
+    entries: list[tuple[str, str, str, str, str]], *, wrapper_key: str | None = "data"
+) -> bytes:
+    """Raw gsm.json bytes from (isin, symbol, company_name, survDesc, survCode) rows.
+
+    `wrapper_key=None` emits a BARE top-level array (the other real-shape hypothesis, P0-14).
+    """
+    rows = [
+        {
+            "companyName": name,
+            "gsmStage": "X",  # the known trap field — never the real stage (P0-14)
+            "gsmTime": "01-Jan-2026 08:06:02",
+            "isin": isin,
+            "survCode": surv_code,
+            "survDesc": surv_desc,
+            "symbol": sym,
+            "srno": i,
+        }
+        for i, (isin, sym, name, surv_desc, surv_code) in enumerate(entries, start=1)
+    ]
+    if wrapper_key is None:
+        return json.dumps(rows).encode()
+    return json.dumps({"columns": [], wrapper_key: rows}).encode()

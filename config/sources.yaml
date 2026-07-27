@@ -41,3 +41,31 @@ corp_actions:
     Accept: "application/json, text/plain, */*"
     Accept-Language: "en-US,en;q=0.9"
     Referer: "https://www.nseindia.com/companies-listing/corporate-filings-actions"
+asm:
+  # NSE ASM (Additional Surveillance Measure) list, JSON snapshot (P0-14 probe 2026-07-27).
+  # Verified live TWICE with just these four headers, no cookie jar and no prime_url needed —
+  # plain httpx gets HTTP 200. BUT the response content depends on session validity: without a
+  # full Akamai bot-challenge session (JS-solved cookies a plain client cannot obtain), the body
+  # is a byte-identical 674-byte STUB {"columns":[...]}, zero data rows, no error. The ingest
+  # adapter's content gate detects and rejects this stub with a loud SourceError — see
+  # src/quant/ingest/surveillance.py and ops/journal.md 2026-07-27. No prime_url: verified
+  # unnecessary (corp_actions-tier priming made no difference to the stub).
+  url_template: "https://www.nseindia.com/json/reports/asm.json"
+  delay_seconds: 3.5
+  timeout_seconds: 30
+  headers:
+    User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+    Accept: "*/*"
+    Accept-Language: "en-US,en;q=0.9"
+    Referer: "https://www.nseindia.com/reports/asm"
+gsm:
+  # NSE GSM (Graded Surveillance Measure) list, JSON snapshot (P0-14 probe 2026-07-27). Same
+  # verified shape/blocker as asm above — see that entry's comment.
+  url_template: "https://www.nseindia.com/json/reports/gsm.json"
+  delay_seconds: 3.5
+  timeout_seconds: 30
+  headers:
+    User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+    Accept: "*/*"
+    Accept-Language: "en-US,en;q=0.9"
+    Referer: "https://www.nseindia.com/reports/gsm"

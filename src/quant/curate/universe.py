@@ -18,15 +18,27 @@ trading day with published prices), absent day = NaN, NO forward-fill:
 
 Exclusions (§4): price<floor · age<180td (age = sessions since first observed row, ADR-022) ·
 ff_mcap proxy (MDTV<floor, absolute — supersedes §4's cross-sectional "rank by MDTV" for
-PIT-safety, ADR-026) · zero_days>max · delisted/suspended (from security.status — a tested hook,
-inert until P0-14 populates it) · surveillance GSM*/ASM≥2 (a PIT-stamped seam; inert until P0-14)
-· pending_ca_review (the ISIN has a needs_review CA with available_at <= d — PIT-scoped per row d,
-never the build asof, so a future-ex-date review can't retroactively exclude a past date;
-resolution status is read from build-time config, ADR-024/025 — reproducibility is per-manifest
-version). `investable` is TRI-STATE: False if any real filter fired; NULL (undetermined) if clean
-on every filter that RAN but surveillance is unchecked; True only if clean AND surveillance
-checked — never assert clean over an unrun hard exclusion. Unchecked surveillance stores the
-sentinel "UNVERIFIED" (not NULL, which reads as checked-clean).
+PIT-safety, ADR-026) · zero_days>max · delisted/suspended (from security.status — a tested hook;
+P0-09's master leaves lifecycle fields NULL by design and NO NSE source has been identified for
+delisting/suspension facts — a separate, still-unsourced item, distinct from surveillance) ·
+surveillance GSM*/ASM≥2 (wired by P0-14: `curate/surveillance.py` supplies the PIT event frame
+from real ASM/GSM ingestion) · pending_ca_review (the ISIN has a needs_review CA with
+available_at <= d — PIT-scoped per row d, never the build asof, so a future-ex-date review can't
+retroactively exclude a past date; resolution status is read from build-time config,
+ADR-024/025 — reproducibility is per-manifest version).
+
+`investable` is TRI-STATE, and — P0-14 — the floor/ceiling gate ONLY the affirmative "nothing
+fired, can we say True" branch; they NEVER suppress a real exclusion. `_surveillance_flags` runs
+whenever a `surveillance` frame is supplied, full stop, reading whatever rows exist independent
+of coverage completeness (so a genuinely-flagged name in a partially-sourced category — e.g. ASM
+live, GSM still blocked — always correctly excludes). `investable=False` if any filter fired
+(including a real surveillance row, regardless of floor/ceiling); `investable=True` only if
+nothing fired AND `surveillance_coverage_floor <= d <= surveillance_coverage_ceiling` (both
+supplied — both categories must have been checked for that date, ADR-026 §P0-14 addendum);
+otherwise `investable` stays NULL (undetermined) — the same honest state whether surveillance is
+entirely unconfigured or merely not fully covered for that date. The `surveillance` STRING
+column shows the active flag when excluded, `None` when affirmatively checked-clean, else the
+sentinel `"UNVERIFIED"` (never plain NULL, which would read as checked-clean).
 """
 
 from dataclasses import dataclass
@@ -39,13 +51,14 @@ import pyarrow as pa
 import structlog
 
 from quant.config import LiquidityConfig, Settings, load_liquidity
+from quant.curate.surveillance import REMOVED as _REMOVED_STAGE
 from quant.errors import ContractViolation
 from quant.schemas import BOOL, DATE, F64, STR, STR_LIST, UniverseMembership, dec
 
 log = structlog.get_logger()
 
 _MDTV = Decimal("0.01")  # universe_membership.mdtv is DECIMAL(18,2) (doc 10)
-_UNVERIFIED = "UNVERIFIED"  # surveillance sentinel while the ASM/GSM feed is unwired (P0-14)
+_UNVERIFIED = "UNVERIFIED"  # sentinel when a date isn't fully surveillance-bounded (see docstring)
 # Reasons in a fixed, deterministic emission order (doc 21 §4: emit ALL, never the first).
 _REASONS = (
     "price_below_floor",
@@ -75,20 +88,30 @@ def build_universe(
     config: LiquidityConfig,
     *,
     surveillance: pd.DataFrame | None = None,
+    surveillance_coverage_floor: date | None = None,
+    surveillance_coverage_ceiling: date | None = None,
 ) -> UniverseResult:
     """Build the full-history universe_membership frame from the published curated tables.
 
-    prices_adj/corporate_actions/trading_calendar/security are the validated doc-10 frames as
-    of the build. `surveillance` (optional, PIT-stamped: isin, available_at, category∈{GSM,ASM},
-    stage) is the P0-14 seam — when None the surveillance filter is a no-op and clean names are
-    left undetermined (investable NULL). Deterministic function of its inputs (no clock, no I/O).
+    prices_adj/corporate_actions/trading_calendar/security are the validated doc-10 frames as of
+    the build. `surveillance` (PIT event frame: isin, available_at, category∈{GSM,ASM}, stage —
+    `curate/surveillance.py`'s P0-14 output) is optional; when supplied, exclusion-firing reads
+    its rows unconditionally (never gated by coverage completeness — see module docstring), while
+    `surveillance_coverage_floor`/`_ceiling` gate ONLY whether a clean name can affirmatively
+    reach `investable=True` for a given date. Every (frame, floor, ceiling) combination has a
+    well-defined, conservative meaning — no ambiguous state requiring a defensive raise.
+    Deterministic function of its inputs (no clock, no I/O).
     """
+    # NOTE: floor > ceiling is a legitimate state (the two surveillance categories' own coverage
+    # windows don't overlap) — never asserted against. The per-row `bounded` check below is
+    # `floor <= d <= ceiling`, which is simply never true when floor>ceiling, degrading safely
+    # to always-undetermined for every date (curate/surveillance.py has the full reasoning).
     window = config.window_trading_days
     price_floor = float(config.price_floor_rupees)
     min_age = config.min_age_trading_days
     mdtv_floor = float(config.mdtv_floor_rupees)
     max_zero = float(config.max_zero_days_pct)
-    surv_checked = surveillance is not None
+    surv_present = surveillance is not None
 
     # Dense session axis = every trading day with a published price (⊆ trading_calendar). Using
     # observed-price dates (not the raw calendar) keeps "60 trading sessions" a genuine window of
@@ -105,7 +128,8 @@ def build_universe(
         "price_rows": len(prices_adj),
         "candidates": 0,
         "non_candidate_rows": 0,
-        "surveillance_checked": int(surv_checked),
+        "surveillance_present": int(surv_present),
+        "surveillance_checked_rows": 0,  # per-row count: floor <= d <= ceiling (see below)
     }
     for r in _REASONS:
         stats[f"excluded_{r}"] = 0
@@ -176,7 +200,18 @@ def build_universe(
         str(k): (v if isinstance(v, str) else None)
         for k, v in zip(security["isin"], security["status"], strict=True)
     }
-    surv_flag = _surveillance_flags(surveillance, c_isin, c_d) if surv_checked else None
+    # Exclusion-firing runs off frame presence alone — coverage completeness never suppresses it.
+    surv_flag = _surveillance_flags(surveillance, c_isin, c_d) if surv_present else None
+    # Bounded: BOTH categories must have been checked for this date before "nothing fired" can
+    # affirmatively become True (max()-derived floor/min()-derived ceiling, curate/surveillance.py).
+    if surveillance_coverage_floor is not None and surveillance_coverage_ceiling is not None:
+        bounded = np.array(
+            [surveillance_coverage_floor <= d <= surveillance_coverage_ceiling for d in c_d],
+            dtype=bool,
+        )
+    else:
+        bounded = np.zeros(len(cand), dtype=bool)
+    stats["surveillance_checked_rows"] = int(bounded.sum())
 
     masks: dict[str, np.ndarray] = {
         "price_below_floor": c_close < price_floor,
@@ -206,23 +241,24 @@ def build_universe(
     for reason in _REASONS:
         has_reason |= masks[reason]
     investable: list[bool | None] = []
-    for flagged in has_reason:
+    for i, flagged in enumerate(has_reason):
         if flagged:
             investable.append(False)
             stats["investable_false"] += 1
-        elif surv_checked:
+        elif bounded[i]:
             investable.append(True)
             stats["investable_true"] += 1
         else:
             investable.append(None)
             stats["investable_null"] += 1
 
-    # surveillance column: the active flag when excluded, None when checked-clean, else UNVERIFIED.
-    surv_values: list[str | None]
-    if surv_checked and surv_flag is not None:
-        surv_values = [f if f else None for f in surv_flag[1]]
-    else:
-        surv_values = [_UNVERIFIED] * len(cand)
+    # surveillance column: the active flag when excluded; None when affirmatively checked-clean
+    # (bounded); else the sentinel (unconfigured OR present-but-not-fully-bounded for this date).
+    active_flags = surv_flag[1] if surv_flag is not None else [None] * len(cand)
+    surv_values: list[str | None] = [
+        active_flags[i] if active_flags[i] else (None if bounded[i] else _UNVERIFIED)
+        for i in range(len(cand))
+    ]
 
     # NaN MDTV stores as NULL (the column is nullable) rather than crashing the DECIMAL write
     # (pa.array rejects Decimal('NaN')); the row is already ff_mcap-excluded above.
@@ -285,8 +321,10 @@ def _age_matrix(present: np.ndarray) -> np.ndarray:
     """age[i, j] = trading sessions from the ISIN's first observed row to session i, inclusive.
 
     Span since first observation (ADR-022: age from price rows, never listing bounds); relist-
-    after-suspension reset is deferred (P0-14) — the zero_days_pct window is the interim guard
-    against a name freshly back from suspension. Sessions before first observation are NaN.
+    after-suspension reset is deferred (no NSE delisting/suspension source has been identified —
+    a separate, still-unsourced item, distinct from P0-14's ASM/GSM surveillance work) — the
+    zero_days_pct window is the interim guard against a name freshly back from suspension.
+    Sessions before first observation are NaN.
     """
     n = present.shape[0]
     rows = np.arange(n).reshape(-1, 1)
@@ -295,19 +333,34 @@ def _age_matrix(present: np.ndarray) -> np.ndarray:
     return np.where(present, age.astype("float64"), np.nan)
 
 
+def _excludes(category: str, stage: int) -> bool:
+    """doc 21 §4: GSM at ANY stage (except the CDC-diff removal sentinel) excludes; ASM only >=2."""
+    return (category == "GSM" and stage != _REMOVED_STAGE) or (category == "ASM" and stage >= 2)
+
+
 def _surveillance_flags(
     surveillance: pd.DataFrame, c_isin: list[str], c_d: list[date]
 ) -> tuple[np.ndarray, list[str | None]]:
     """As-of surveillance exclusion (GSM* | ASM≥2) per candidate; PIT via available_at <= d.
 
     Returns (fired_mask, active_flag_per_candidate). The frame carries isin, available_at,
-    category∈{GSM,ASM}, stage; a current snapshot applied to history would leak, so only rows
-    known by d apply. Tested with a synthetic frame so P0-14 inherits verified logic.
+    category∈{GSM,ASM}, stage — a current snapshot applied to history would leak, so only rows
+    known by d apply.
+
+    Each (isin, category) is tracked INDEPENDENTLY: for a given d, that category's own LATEST
+    row <= d (regardless of whether IT excludes) determines that category's current state, and
+    the two categories are then OR'd. This is deliberately NOT "the latest row across both
+    categories wins" — a GSM removal event landing after an ASM stage-3 row must never clear the
+    still-active ASM exclusion, and a name concurrently on both must have each tracked on its own
+    timeline. Deterministic tie-break when both categories fire at the identical available_at:
+    fixed iteration order (ASM then GSM) plus a stable max() over (avail, category) — GSM's flag
+    string wins an exact tie (GSM sorts after ASM lexicographically). Tested with a synthetic
+    frame so P0-14 inherits verified logic.
     """
     need = {"isin", "available_at", "category", "stage"}
     if not need.issubset(surveillance.columns):
         raise ContractViolation(f"surveillance frame missing columns; need {sorted(need)}")
-    by_isin: dict[str, list[tuple[date, str, int]]] = {}
+    by_key: dict[tuple[str, str], list[tuple[date, int]]] = {}
     for isin, avail, cat, stage in zip(
         surveillance["isin"],
         surveillance["available_at"],
@@ -315,18 +368,29 @@ def _surveillance_flags(
         surveillance["stage"],
         strict=True,
     ):
-        by_isin.setdefault(str(isin), []).append((pd.Timestamp(avail).date(), str(cat), int(stage)))
+        key = (str(isin), str(cat))
+        by_key.setdefault(key, []).append((pd.Timestamp(avail).date(), int(stage)))
+    for entries in by_key.values():
+        entries.sort()  # ascending available_at, so "latest <= d" is a simple tail scan below
+
     fired = np.zeros(len(c_isin), dtype=bool)
     flags: list[str | None] = [None] * len(c_isin)
     for i, (isin, d) in enumerate(zip(c_isin, c_d, strict=True)):
-        active: tuple[date, str, int] | None = None
-        for avail, cat, stage in by_isin.get(isin, ()):
-            excludes = cat == "GSM" or (cat == "ASM" and stage >= 2)
-            if avail <= d and excludes and (active is None or avail > active[0]):
-                active = (avail, cat, stage)
-        if active is not None:
+        firing: list[tuple[date, str, int]] = []
+        for cat in ("ASM", "GSM"):  # fixed order: deterministic tie-break
+            cat_entries = by_key.get((isin, cat))
+            if not cat_entries:
+                continue
+            eligible = [(avail, stage) for avail, stage in cat_entries if avail <= d]
+            if not eligible:
+                continue
+            avail, stage = eligible[-1]  # latest row <= d, PERIOD -- matched or not
+            if _excludes(cat, stage):
+                firing.append((avail, cat, stage))
+        if firing:
+            avail, cat, stage = max(firing, key=lambda t: (t[0], t[1]))
             fired[i] = True
-            flags[i] = f"{active[1]}_{active[2]}"
+            flags[i] = f"{cat}_{stage}"
     return fired, flags
 
 

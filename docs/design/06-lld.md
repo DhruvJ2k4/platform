@@ -6,9 +6,16 @@
 **Interface:** `fetch(date) -> RawArtifact{path, sha256, source, logical_date}`; CLI
 `ingest <source> --date|--since`. **Workflow:** politeness delay → download → checksum →
 immutable write → registry upsert (idempotent by (source, logical_date)).
-**Failure modes:** 404 on holiday (expected; calendar check) · format drift (parser is
-NOT here — raw is stored regardless, parse failures surface in curation, data never lost)
-· IP block (exponential backoff, alert after N days) · partial download (checksum reject).
+**Failure modes:** 404 on holiday (expected; calendar check) · format drift (the FORMAT
+PARSER is not here — genuinely uncertain-but-real-shaped content is always stored regardless
+of parseability, parse failures surface in curation, data never lost) — but a fetch-validity
+pre-filter IS in scope when the response is conclusively NOT DATA at all (an HTML block page,
+`symbolchange.py`/`corp_actions.py`'s precedent; or a known degraded/stub shape, P0-14's
+`ingest/surveillance.py` — the ASM/GSM endpoints return a byte-identical "columns-only" stub
+with HTTP 200 when the required session is missing, indistinguishable from real data by byte
+prefix alone) — these are rejected with a loud `SourceError` before storage, never silently
+preserved as if they were a real (if unparseable) day's data · IP block (exponential backoff,
+alert after N days) · partial download (checksum reject).
 
 ## 6.2 Curation build
 **Responsibility:** deterministic raw → curated transform; the only writer of curated.

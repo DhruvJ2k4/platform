@@ -73,14 +73,23 @@ investable(book) = position_value(book) ≤ p_max · MDTV      # evaluated at qu
 ```
 Amended by ADR-026 (P0-13): the universe is materialised in-build and published as
 `universe_membership` (partitioned by year, the only allowed source). `investable` is TRI-STATE
-— NULL when a name is clean on every RUN filter but surveillance is unchecked (the P0-14 seam;
-sentinel `surveillance="UNVERIFIED"`), never True over an unrun hard exclusion. `age` = trading
-sessions since the FIRST observed price row (never listing bounds, ADR-022). `pending CA review`
-is PIT-scoped per row d — fires iff a needs_review CA has `available_at ≤ d`, never the build
-asof (a future-ex-date review can't retroactively exclude a past date). `investable(book)` is
-DEFERRED (needs corpus + P1-06 sizing); the query surfaces `capacity = p_max·MDTV` instead.
-Delisting/suspension (`security.status`) and surveillance are tested seams, inert until
-populated (both P0-14 — P0-09's master leaves lifecycle fields NULL by design).
+— NULL when a name is clean on every RUN filter but coverage doesn't bound the date (never True
+over an unrun/unverified hard exclusion). `age` = trading sessions since the FIRST observed
+price row (never listing bounds, ADR-022). `pending CA review` is PIT-scoped per row d — fires
+iff a needs_review CA has `available_at ≤ d`, never the build asof (a future-ex-date review
+can't retroactively exclude a past date). `investable(book)` is DEFERRED (needs corpus + P1-06
+sizing); the query surfaces `capacity = p_max·MDTV` instead.
+Amended by ADR-027 (P0-14): surveillance (GSM*/ASM≥2) is wired for real — `curate/surveillance.py`
+turns full-history ASM/GSM raw snapshots into a PIT event frame via CDC-diff (a security's
+absence from a new snapshot is diffed against the prior one to emit an explicit removal event,
+not just additions). Exclusion-firing reads that frame unconditionally; `investable=True`
+additionally requires `surveillance_coverage_floor ≤ d ≤ surveillance_coverage_ceiling` (BOTH
+ASM and GSM independently checked for that date) — sentinel `surveillance="UNVERIFIED"` when
+unbounded. Live sourcing is blocked (NSE's ASM/GSM JSON endpoints require a full Akamai
+bot-challenge session no plain HTTP client can obtain — ops/journal.md 2026-07-27); the real
+vault therefore still shows zero coverage today (a deliberate, verified no-op vs. pre-P0-14).
+Delisting/suspension (`security.status`) stays a tested-but-inert hook — no NSE source has been
+identified for it (a separate, still-unsourced item, distinct from surveillance; doc 20 backlog).
 Candidates line amended by ADR-022 (was "listings active on d"): listing answers identity
 only — NULL valid_from = open past and open-ended valid_to would leak future/dead listings
 into d's candidate set, and day-exact series occupancy (EQ vs BE vs parallel BL/T0) is a
