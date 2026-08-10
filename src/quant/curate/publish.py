@@ -34,7 +34,8 @@ log = structlog.get_logger()
 _POINTER = "CURRENT"
 _MANIFEST = "manifest.json"
 _SHORTHASH_LEN = 8
-# Tables this publish owns; later tasks extend (TRI P0-15…). universe_membership joined in P0-13.
+# Tables this publish owns. universe_membership joined in P0-13; index_tri (the benchmark TR
+# series, ADR-008) joined in P0-15 -- non-partitioned (two tiny series), keyed (index_name, d).
 PUBLISHED_TABLES = (
     "security",
     "listing",
@@ -42,6 +43,7 @@ PUBLISHED_TABLES = (
     "corporate_actions",
     "prices_adj",
     "universe_membership",
+    "index_tri",
 )
 # Hive-partitioned by year, files sorted (isin, d) — doc 10 (prices_adj) generalised to the
 # universe so `universe --date` reads one year-partition with a d predicate (<1s, P0-13).

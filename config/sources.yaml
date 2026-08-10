@@ -69,3 +69,47 @@ gsm:
     Accept: "*/*"
     Accept-Language: "en-US,en;q=0.9"
     Referer: "https://www.nseindia.com/reports/gsm"
+nifty50_tri:
+  # NIFTY 50 Total Return Index benchmark (P0-15, ADR-008; sourcing probe 2026-08-09, see
+  # ops/journal.md). niftyindices' TRI values come from a POST page-method distinct from the
+  # price endpoint: getTotalReturnIndexString takes a JSON `cinfo` body {name, startDate, endDate,
+  # indexName} (dates DD-Mon-YYYY) and returns the historical index table for the TR index. The
+  # plain index label ('NIFTY 50') is sent to the TR endpoint -- there is NO separate '... TR'
+  # name (every '... TR' spelling 404s to []); the endpoint IS the TR selector. SOURCING BLOCKER:
+  # this endpoint tarpits every scripted client (Akamai bot wall + no non-browser session), so a
+  # live run today gets the HTML shell and the ingest content-gate refuses it (loud SourceError,
+  # nothing stored) -- forward-compatible, stores real TRI the day a session mechanism exists
+  # (P0-14 precedent). chunk_days caps each request's window (the endpoint rejects spans > ~1y).
+  url_template: "https://www.niftyindices.com/BackPage/getTotalReturnIndexString"
+  method: "POST"
+  index_label: "NIFTY 50"
+  chunk_days: 364
+  prime_url: "https://www.niftyindices.com/reports/historical-data"
+  delay_seconds: 3.5
+  timeout_seconds: 30
+  headers:
+    User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+    Accept: "application/json, text/javascript, */*; q=0.01"
+    Accept-Language: "en-US,en;q=0.9"
+    Content-Type: "application/json; charset=UTF-8"
+    X-Requested-With: "XMLHttpRequest"
+    Origin: "https://www.niftyindices.com"
+    Referer: "https://www.niftyindices.com/reports/historical-data"
+midcap150_tri:
+  # NIFTY MIDCAP 150 Total Return Index benchmark (P0-15). Same endpoint/blocker as nifty50_tri
+  # above -- see that entry's comment. Only the index label differs.
+  url_template: "https://www.niftyindices.com/BackPage/getTotalReturnIndexString"
+  method: "POST"
+  index_label: "NIFTY MIDCAP 150"
+  chunk_days: 364
+  prime_url: "https://www.niftyindices.com/reports/historical-data"
+  delay_seconds: 3.5
+  timeout_seconds: 30
+  headers:
+    User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+    Accept: "application/json, text/javascript, */*; q=0.01"
+    Accept-Language: "en-US,en;q=0.9"
+    Content-Type: "application/json; charset=UTF-8"
+    X-Requested-With: "XMLHttpRequest"
+    Origin: "https://www.niftyindices.com"
+    Referer: "https://www.niftyindices.com/reports/historical-data"

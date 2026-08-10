@@ -33,7 +33,7 @@ CREATE TABLE fundamentals_pit (isin TEXT, period_end DATE, statement TEXT,
   source TEXT, confidence TEXT, revision_seq INT);                              -- confidence: native|bridged
 CREATE TABLE events (event_id TEXT PRIMARY KEY, isin TEXT, kind TEXT,
   severity INT, payload JSON, observed_at TIMESTAMP);
-CREATE TABLE index_tri (index_name TEXT, d DATE, tri_value DECIMAL(18,6));
+CREATE TABLE index_tri (index_name TEXT, d DATE, tri_value DECIMAL(18,6));    -- benchmark TR series (ADR-008); PUBLISHED (7th table, non-partitioned) & gap-checked vs trading_calendar — P0-15/ADR-028; live niftyindices sourcing blocked so real vault is empty (forward-compatible)
 CREATE TABLE raw_registry (source TEXT, logical_date DATE, path TEXT,
   sha256 TEXT, fetched_at TIMESTAMP);                                           -- raw ledger (doc 08): supersession rows, no PK
 -- operational (append-only, in backup set):

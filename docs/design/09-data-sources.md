@@ -8,7 +8,7 @@
 | NSE symbol-change file | Security-master rename boundaries + pre-observation chains | High (official) | Free | Snapshot (identity facts, not signals — ADR-022) | 1999→ | Single CSV, tolerant host | Public | Low | **Core (P0-09)** |
 | NSE filings/announcements (XBRL/CSV) | PIT fundamentals + event layer | High | Free | **Yes (broadcast ts)** | Fwd + partial archive | Portal; bot-sensitive | Public regulatory | Med-high (weakest link; absence-alarms) | **Core (P1 collect-early)** |
 | ASM/GSM surveillance lists | Hard exclusions | High | Free | Yes (daily) | Fwd | File | Public | Low | **Core** |
-| NSE Indices TRI values | Benchmarks | High | Free | Yes | Long | File/portal | Public (values) | Low | **Core** |
+| NSE Indices TRI values | Benchmarks | High | Free | Yes | Long | niftyindices `getTotalReturnIndexString` (POST, ≤364d window, Akamai bot-walled — P0-15) | Public (values) | Low | **Core (sourcing blocked, P0-15/ADR-028)** |
 | Broker (Kite ₹500/mo) | Live quotes at execution; candles | Good | ₹500/mo | No (survivor list) | 10y intraday | Good API | No redistribution | Low | Optional P2 |
 | Screener.in | Validation oracle, display | Good UX | Free | No | ~10y shown | Per-company export | ToS-restricted | Low (sampled) | Oracle only |
 | sharpely / BacktestIndia | Methodology cross-checks | n/a | Free/paid | Claimed | n/a | UI | n/a | None | External sanity checks |

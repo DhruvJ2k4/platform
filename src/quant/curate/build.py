@@ -26,6 +26,7 @@ from quant.config import Settings, load_ca_resolutions, load_liquidity
 from quant.curate import corp_actions as ca_mod
 from quant.curate.adjust import adjust_prices
 from quant.curate.calendar import build_calendar
+from quant.curate.index_tri import build_index_tri
 from quant.curate.master import build_master_frames
 from quant.curate.parsers.bhavcopy import parse_bhavcopy
 from quant.curate.parsers.symbolchange import parse_symbolchange
@@ -142,6 +143,31 @@ def curate_rebuild(asof: date, settings: Settings | None = None) -> CurateReport
         surveillance_coverage_ceiling=surv.coverage_ceiling,
     )
 
+    # Benchmark TR series (P0-15, ADR-008): parse every raw TR chunk -> index_tri, gap-checked
+    # vs the calendar. On the real vault today both sources are empty (sourcing blocker,
+    # ops/journal.md 2026-08-10), so this publishes zero rows -- honest, inert on real data.
+    index_tri_result = build_index_tri(calendar, asof, s)
+    its = index_tri_result.stats
+    if its["rows"] == 0:  # loud zero-state (PM review, P0-14): never a silent absent benchmark
+        log.warning(
+            "index_tri_benchmark_unavailable",
+            note="no TRI rows -- niftyindices sourcing blocked (ADR-028); P1-10/§14 blocked",
+        )
+    if its["gap_days_max"] > 14:
+        log.warning(
+            "index_tri_gap",
+            gap_days=its["gap_days_max"],
+            note="longest run of consecutive trading sessions with no TRI value in the overlap",
+        )
+    if its["conflicts"] > 0:  # a series with drifting values across chunks was quarantined (empty)
+        log.warning(
+            "index_tri_value_conflict",
+            conflicts=its["conflicts"],
+            note="a TRI series had conflicting values across chunks -- quarantined (empty)",
+        )
+    # extraneous_dates is recorded (stats/manifest) but NOT alarmed: under the sampled vault it is
+    # dominated by calendar incompleteness, meaningful only once P0-19 densifies it (ADR-028).
+
     manifest: dict[str, object] = {
         "asof": str(asof),
         "code_ref": _code_ref(),
@@ -153,6 +179,15 @@ def curate_rebuild(asof: date, settings: Settings | None = None) -> CurateReport
             "surveillance_floor": str(surv.coverage_floor) if surv.coverage_floor else None,
             "surveillance_ceiling": str(surv.coverage_ceiling) if surv.coverage_ceiling else None,
         },
+        # Benchmark quality persisted in-band (risk-manager review): a read_current("index_tri")
+        # consumer (P1-10 relative performance) reads these from manifest.json to gate on gaps,
+        # rather than depending on the operator having watched the build log's WARNs.
+        "index_tri": {
+            "rows": its["rows"],
+            "gap_days_max": its["gap_days_max"],
+            "extraneous_dates": its["extraneous_dates"],
+            "conflicts": its["conflicts"],
+        },
     }
     tables = {
         "security": master.security,
@@ -161,6 +196,7 @@ def curate_rebuild(asof: date, settings: Settings | None = None) -> CurateReport
         "corporate_actions": ca.corporate_actions,
         "prices_adj": adjusted.prices_adj,
         "universe_membership": universe.frame,
+        "index_tri": index_tri_result.frame,
     }
     result: PublishResult = publish(tables, asof=asof, manifest=manifest, settings=s)
     report = CurateReport(
@@ -175,6 +211,7 @@ def curate_rebuild(asof: date, settings: Settings | None = None) -> CurateReport
             "adjust": adjusted.stats,
             "surveillance": {k: int(v) for k, v in surv.stats.items()},
             "universe": {k: int(v) for k, v in universe.stats.items()},
+            "index_tri": {k: int(v) for k, v in index_tri_result.stats.items()},
             "tables": {name: len(frame) for name, frame in tables.items()},
         },
     )
@@ -213,7 +250,15 @@ def _config_hashes(settings: Settings) -> dict[str, str]:
 
 def _raw_watermarks(store: RawStore) -> dict[str, dict[str, str]]:
     marks: dict[str, dict[str, str]] = {}
-    for source in ("bhavcopy", "symbolchange", "corp_actions", "asm", "gsm"):
+    for source in (
+        "bhavcopy",
+        "symbolchange",
+        "corp_actions",
+        "asm",
+        "gsm",
+        "nifty50_tri",
+        "midcap150_tri",
+    ):
         artifacts = store.latest_per_date(source)
         if artifacts:
             marks[source] = {

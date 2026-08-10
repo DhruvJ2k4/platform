@@ -161,6 +161,37 @@ def surveillance_frame(rows: list[tuple[str, date, str, int]]) -> pd.DataFrame:
     return table.to_pandas(types_mapper=pd.ArrowDtype)
 
 
+def index_tri_bytes(
+    rows: list[tuple[str, str]], *, response_index_name: str = "Nifty 50", wrap_d: bool = False
+) -> bytes:
+    """Raw niftyindices TR response bytes from (HistoricalDate 'DD Mon YYYY', value) rows (P0-15).
+
+    Mirrors the confirmed niftyindices array shape (probe 2026-08-09). The TR level rides in
+    `TotalReturnsIndex` — the parser reads ONLY genuine TR fields; the price OHLC (incl. CLOSE) is
+    emitted as a DECOY `"0.01"` so every test that asserts `tri_value == value` also proves the
+    parser never reads CLOSE-as-TRI (the ADR-008/ADR-028 price-as-TRI lie). `wrap_d=True` wraps the
+    array in the `{"d": "<json string>"}` page-method envelope (exercises the dual-envelope path).
+    Values are SYNTHETIC — no real TRI sample is obtainable (sourcing blocker, ops/journal.md
+    2026-08-10).
+    """
+    payload = [
+        {
+            "RequestNumber": "His0",
+            "Index Name": "",
+            "INDEX_NAME": response_index_name,
+            "HistoricalDate": hd,
+            "TotalReturnsIndex": value,  # the TR level the parser reads
+            "OPEN": "0.01",
+            "HIGH": "0.01",
+            "LOW": "0.01",
+            "CLOSE": "0.01",  # price decoy — parser must never read this as the TRI level
+        }
+        for hd, value in rows
+    ]
+    body = json.dumps(payload)
+    return json.dumps({"d": body}).encode() if wrap_d else body.encode()
+
+
 def asm_snapshot_bytes(
     entries: list[tuple[str, str, str, str]], groups: tuple[str, ...] = ("longterm",)
 ) -> bytes:

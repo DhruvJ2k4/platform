@@ -648,3 +648,78 @@
     than waiting on unscheduled P0-17.
   Final state: 419 tests pass (up from 340 pre-P0-14), ruff/format/mypy-strict/lint-imports all
   clean, `days_since_ceiling` staleness logic smoke-tested in isolation post-fix.
+
+## 2026-08-10 — P0-15: Index TRI ingester (benchmarks) [ADR-028]
+
+- Sourcing investigation (niftyindices — doc 05/09 name it as THE TRI source but give no endpoint).
+  Web research + a live operator probe session (residential IP; the CI-side may never contact these
+  endpoints) mapped the real API and a hard blocker:
+  * PRICE index works: POST `https://www.niftyindices.com/BackPage/getHistoricaldatatabletoString`,
+    Akamai-cookie-gated (`ak_bmsc`/`bm_sv`/`ASP.NET_SessionId`), body
+    `{"cinfo":"{'name':..,'startDate':'DD-Mon-YYYY','endDate':..,'indexName':..}"}`, response a
+    plain JSON array of `{INDEX_NAME,HistoricalDate:'DD Mon YYYY',OPEN,HIGH,LOW,CLOSE}`. Confirmed
+    live for NIFTY 50 and NIFTY MIDCAP 150.
+  * The plain TOTAL RETURN index is NOT on that endpoint — every `NIFTY 50 TR`/`... TRI`/`... - TR`
+    spelling returns `[]` (a clean control, `NIFTY 50`, returns 13 rows), and it is NOT in the
+    historical-data UI (only price under Broad Market Indices; only leveraged/inverse
+    `NIFTY50 TR 1X INVERSE` / `2X LEVERAGE` under Strategy Indices). So there is no browser call to
+    capture either.
+  * TRI has its OWN endpoint `getTotalReturnIndexString` (≤364-day window per third-party libs) but
+    it TARPITS every scripted client — plain, cookie-primed, and replaying a live browser's fresh
+    Akamai cookies alike — no response inside 120s. Same class of wall as P0-14's ASM/GSM (an Akamai
+    bot-challenge session a plain client cannot obtain).
+- Decision (ADR-028): ship the FULL index_tri mechanism forward-compatible, exactly as P0-14 shipped
+  surveillance. Adapter (`ingest/index_tri.py`) targets the real `getTotalReturnIndexString`,
+  cookie-primes, chunks by `chunk_days`, and a content gate refuses the HTML shell / non-array with a
+  loud `SourceError` (nothing stored) — so a live run today exits 1, and the day a session mechanism
+  exists this same code stores real TRI (config-only GIVEN a reachable endpoint of the confirmed
+  shape — a value-field mismatch trips a one-spot parser reconcile, and a headless-browser unblock is
+  itself a new ADR-010 dep, so not literally "zero code" unconditionally). `SourceSpec` gains additive
+  `method`/`index_label`/`chunk_days` (config-contract change, doc 09 updated). Parser
+  (`curate/parsers/index_tri.py`) targets the CONFIRMED niftyindices array shape (`HistoricalDate` +
+  level), reading the level ONLY from a genuine TR field `_VALUE_KEYS = (TotalReturnsIndex,
+  total_returns_index)` — `CLOSE` is EXCLUDED (it is the PRICE close; reading it as TRI would inflate
+  the benchmark by ~dividend yield, undetectable by §14's ≥0.995 correlation) — raising `ParseError`
+  if no TR field is present (never a silent guess; P0-09 reconcile-on-first-real-data; values must be
+  strings/ints ≤6dp, never binary floats). Builder (`curate/index_tri.py`) reads all chunks, collapses
+  identical overlapping (index,d) rows and QUARANTINES a conflicting series (empty + error stat, never
+  aborting the rebuild), validates `IndexTri`, and GAP-CHECKS vs `trading_calendar` (a reported
+  diagnostic + WARN, never a publish gate — a benchmark hole must not block the money-path store).
+  `index_tri` joins `PUBLISHED_TABLES` as the 7th table (non-partitioned). On the real vault today it
+  publishes ZERO rows (blocker) — honest, inert on real data, mirroring P0-14's `investable_true=0`.
+- Gap-check semantics + sampled-vault caveat (ADR-026): the backfill vault is SAMPLED so the calendar
+  is sparse while real TRI is dense. `missing_sessions`/`gap_days_max` (calendar sessions in the
+  OVERLAP with no TR value) are the TRUSTWORTHY-but-coverage-limited signals (≈0 today; a real TRI hole
+  on a known trading day shows here) and are WARN'd; `extraneous_dates` (TR dates in the overlap that
+  are not sessions) is DOMINATED by calendar incompleteness until P0-19 densifies it, so it is recorded
+  NOT alarmed (a dense daily TRI has many dates a sparse calendar lacks — sampling, not drift; a broken
+  date axis is caught at parse time instead). A weekend `special` session niftyindices may not publish
+  is an accepted ≤1 missing/gap tolerance. Fixtures use SYNTHETIC TR values in the real array shape,
+  with a differing `CLOSE` decoy proving the parser never reads CLOSE-as-TRI.
+- Verify: 460 tests pass (up from 419 pre-P0-15), ruff/format/mypy-strict/lint-imports all clean, layer
+  rule + engine purity KEPT. Scratchpad probe scripts (niftyindices) are session-only, never committed.
+- `/review-domains` (9 seats): contract-auditor PASS/0; arch-purity, money-auditor, docs-warden, test-
+  warden effectively clean (NOTEs only). 1 CRITICAL + 7 WARN + NOTEs, ALL fixed in-pass (0 open):
+  * [quant-researcher CRITICAL] `CLOSE` in `_VALUE_KEYS` silently resurrected the price-as-TRI lie
+    (the niftyindices table ALWAYS carries CLOSE, so a real TR response with its level in an
+    unrecognized key would emit price CLOSE with no ParseError; §14's ≥0.995 can't catch it) — fixed:
+    dropped CLOSE, parser now requires a genuine TR field + a `test_close_only_is_parse_error` guard.
+  * [risk WARN] a value CONFLICT aborted the ENTIRE `curate_rebuild` (contradicting ADR-028's own
+    "benchmark hole must never block the money path") — fixed: quarantine the offending series (empty +
+    conflict stat), rebuild survives; test rewritten to assert quarantine + other series unaffected.
+  * [risk/quant WARN] gap stats lived only in a transient log/CurateReport — fixed: persisted into
+    `manifest.json` (`index_tri` block) so a `read_current` consumer (P1-10) can gate in-band.
+  * [risk/docs WARN] ingest gate rejected the `{"d":...}` envelope the parser supports (breaking the
+    forward-compat claim) — fixed: gate now admits `[` OR `{`, rejecting only the HTML shell/empty.
+  * [quant/exec WARN] metric labels were INVERTED for the sparse-calendar/dense-TRI regime — fixed:
+    docstring/ADR/journal now name missing/gap as trustworthy and extraneous as sampling-dominated;
+    dropped the naive `extraneous_dates>0` WARN.
+  * [exec WARN] `extraneous` was computed over the full TRI list, not the overlap ADR-028 states —
+    fixed: bounded to `lo..hi`; property test updated.
+  * [PM WARN] an empty real-vault `index_tri` published silently — fixed: `benchmark_unavailable` WARN
+    in build.py + curate CLI summary (P0-14 loud-zero-state precedent).
+  * [money NOTEs] reject a binary-float level + >6dp precision (loud ParseError) — fixed + boundary
+    tests. [exec/PM/docs NOTEs] special-session ≤1 tolerance documented; "zero code" softened to
+    "config-only given a reachable confirmed-shape endpoint"; P0-16 must allow-list an empty index_tri;
+    journal-pointer dates corrected to 2026-08-10; dead `_EMPTY_COLS` branch removed.
+  Final: re-verified 466 tests pass (+6 review-driven), ruff/format/mypy-strict/lint-imports clean.

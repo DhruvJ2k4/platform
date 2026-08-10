@@ -142,6 +142,20 @@ class SourceSpec(BaseModel):
     # Cookie-prime GET before the real request (P0-10): the NSE www API is cookie-gated, so the
     # adapter fetches prime_url first (its 403 still sets the Akamai cookie) to unlock the API.
     prime_url: str | None = None
+    # POST sources (P0-15, index TRI): niftyindices' TRI endpoint is an ASP.NET page-method taking
+    # a JSON `cinfo` body naming the index + date window. `index_label` is the exact niftyindices
+    # index name the adapter puts in that body; `chunk_days` caps each request's window (the TRI
+    # endpoint rejects spans > ~1y), so a multi-year backfill fetches in <=chunk_days slices.
+    method: str = "GET"
+    index_label: str | None = None
+    chunk_days: int | None = Field(default=None, gt=0)
+
+    @field_validator("method")
+    @classmethod
+    def _known_method(cls, v: str) -> str:
+        if v not in ("GET", "POST"):
+            raise ValueError(f"method must be GET or POST, got {v!r}")
+        return v
 
 
 def load_sources(settings: Settings | None = None) -> dict[str, SourceSpec]:

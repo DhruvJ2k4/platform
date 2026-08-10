@@ -139,7 +139,7 @@ class TestRebuildPublish:
         assert current_run_id(settings) == second.run_id
         assert Path(first.path).is_dir()  # old version remains, untouched
 
-    def test_all_six_tables_published_and_readable(self, settings: Settings) -> None:
+    def test_all_seven_tables_published_and_readable(self, settings: Settings) -> None:
         curate_rebuild(ASOF, settings)
         for table, expected_rows in {
             "security": 2,  # ITEST + the CA-only ISIN never observed in prices... see below
@@ -147,6 +147,7 @@ class TestRebuildPublish:
             "corporate_actions": 2,
             "prices_adj": 3,
             "universe_membership": 3,  # ITEST is the only EQ candidate → one row per session
+            "index_tri": 0,  # P0-15: no TRI raw in this vault → benchmark table publishes empty
         }.items():
             frame = read_current(table, settings)
             if table == "security":

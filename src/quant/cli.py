@@ -18,7 +18,7 @@ import typer
 from quant import __version__
 from quant.config import Settings, SourceSpec, source_spec
 from quant.errors import ConfigError, PlatformError
-from quant.ingest import RawArtifact, RawStore, bhavcopy, corp_actions, symbolchange
+from quant.ingest import RawArtifact, RawStore, bhavcopy, corp_actions, index_tri, symbolchange
 from quant.ingest import surveillance as surveillance_ingest
 
 app = typer.Typer(name="platform")
@@ -70,6 +70,8 @@ def ingest(
             summary = _ingest_asm(date, since, until, weekends)
         elif source == surveillance_ingest.SOURCE_GSM:
             summary = _ingest_gsm(date, since, until, weekends)
+        elif source in index_tri.SOURCES:
+            summary = _ingest_index_tri(source, date, since, until, weekends)
         else:
             known = [
                 bhavcopy.SOURCE,
@@ -77,6 +79,7 @@ def ingest(
                 corp_actions.SOURCE,
                 surveillance_ingest.SOURCE_ASM,
                 surveillance_ingest.SOURCE_GSM,
+                *index_tri.SOURCES,
             ]
             raise ConfigError(f"no adapter for source {source!r}; available: {known}")
     except PlatformError as exc:
@@ -93,6 +96,11 @@ def ingest(
         typer.echo(
             f"{summary.source} {summary.since}..{summary.until}: "
             f"{'stored' if summary.stored else 'noop'} sha256={summary.sha256[:12]}"
+        )
+    elif isinstance(summary, index_tri.IngestSummary):
+        typer.echo(
+            f"{summary.source} {summary.since}..{summary.until}: "
+            f"stored={summary.stored} noop={summary.noop} chunks"
         )
     else:
         typer.echo(
@@ -234,6 +242,21 @@ def curate(
             typer.echo(
                 f"  WARN surveillance_ceiling_stale: {stale} days since last snapshot", err=True
             )
+        # Benchmark TR (P0-15): surface the zero-state (never a silent absent benchmark), a wide
+        # gap, and a quarantined value-conflict here too, not only in --json / the log stream.
+        tri_stats = report.stats.get("index_tri", {})
+        if tri_stats.get("rows", 0) == 0:
+            typer.echo(
+                "  WARN index_tri_benchmark_unavailable: 0 TRI rows (sourcing blocked, ADR-028)",
+                err=True,
+            )
+        if tri_stats.get("gap_days_max", 0) > 14:
+            typer.echo(f"  WARN index_tri_gap: {tri_stats['gap_days_max']} sessions", err=True)
+        if tri_stats.get("conflicts", 0):
+            typer.echo(
+                f"  WARN index_tri_value_conflict: {tri_stats['conflicts']} series quarantined",
+                err=True,
+            )
 
 
 @app.command()
@@ -342,3 +365,22 @@ def _ingest_corp_actions(
     return corp_actions.IngestSummary(
         corp_actions.SOURCE, str(first), str(last), created, artifact.sha256
     )
+
+
+def _ingest_index_tri(
+    source: str, date: str | None, since: str | None, until: str | None, weekends: bool
+) -> index_tri.IngestSummary:
+    """Windowed TRI source (P0-15): --since required (window start); --until defaults to today."""
+    if date is not None or weekends:
+        raise ConfigError(
+            f"{source} is a windowed source: use --since (required) and optional --until;"
+            " --date and --include-weekends do not apply"
+        )
+    if since is None:
+        raise ConfigError(f"{source} requires --since (window start)")
+    first = _parse_iso(since, "--since")
+    last = _parse_iso(until, "--until") if until is not None else datetime.date.today()
+    spec = source_spec(source)
+    store = RawStore(Settings())
+    with _make_client() as client:
+        return index_tri.fetch_window(source, first, last, store=store, spec=spec, client=client)
